@@ -43,7 +43,7 @@ def check_password():
 if check_password():
     # הצגת לוגו בראש העמוד (ודא שיש קובץ בשם logo.png ב-GitHub)
     if os.path.exists("logo.png"):
-        st.image("logo.png", width=150)
+        st.image("logo.png", width=400)
     
     st.title("🔍 מערכת ניתוח מאגר קבוע")
     
@@ -111,3 +111,4 @@ if check_password():
     if st.sidebar.button("התנתק"):
         st.session_state["password_correct"] = False
         st.rerun()
+
