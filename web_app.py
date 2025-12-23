@@ -49,4 +49,5 @@ if uploaded_files:
                 csv = duplicates.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("הורד רשימת כפילויות", data=csv, file_name="duplicates.csv")
             else:
+
                 st.success("אין כפילויות במאגר")
