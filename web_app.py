@@ -3,7 +3,7 @@ import pandas as pd
 import os
 # הוספת הלוגו בראש העמוד
 # width=450 קובע את הגודל של הלוגו (תוכל לשנות לפי הצורך)
-st.image("logo.png", width=150)
+st.image("logo.png", width=600)
 # הגדרת סיסמה
 PASSWORD = "123" # שנה לסיסמה שלך
 
@@ -90,5 +90,6 @@ if check_password():
     if st.sidebar.button("התנתק"):
         st.session_state["password_correct"] = False
         st.rerun()
+
 
 
