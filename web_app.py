@@ -1,7 +1,52 @@
 import streamlit as st
 import pandas as pd
 import os
+def local_css():
+    st.markdown(
+        """
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap" rel="stylesheet">
+        
+        <style>
+        /* הגדרת גופן וכיוון לכל האתר */
+        html, body, [data-testid="stSidebar"], .main, stApp {
+            direction: rtl;
+            text-align: right;
+            font-family: 'Heebo', sans-serif;
+        }
+        
+        /* החלת הגופן על כותרות ורכיבי טקסט */
+        h1, h2, h3, h4, p, label, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
+            font-family: 'Heebo', sans-serif !important;
+            direction: rtl;
+            text-align: right !important;
+        }
 
+        /* עיצוב כפתורים שייראו טוב יותר בעברית */
+        .stButton>button {
+            width: 100%;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+
+        /* יישור תיבות הטקסט */
+        input {
+            text-align: right;
+        }
+        
+        /* סידור אייקונים ב-Sidebar שיתאימו לימין */
+        [data-testid="stSidebarNav"] {
+            direction: rtl;
+            text-align: right;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# הפעלת העיצוב (חשוב לקרוא לזה בתחילת הקוד)
+local_css()
 # 1. הגדרות תצוגה ויישור לימין (RTL)
 st.set_page_config(page_title="מערכת ניתוח עובדים", layout="wide")
 
@@ -111,5 +156,6 @@ if check_password():
     if st.sidebar.button("התנתק"):
         st.session_state["password_correct"] = False
         st.rerun()
+
 
 
