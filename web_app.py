@@ -45,7 +45,7 @@ if check_password():
     if os.path.exists("logo.png"):
         st.image("logo.png", width=400)
     
-    st.title("🔍 מערכת ניתוח מאגר קבוע")
+    st.title("🔍 איתור תביעות כפולות")
     
     # 3. טעינת נתונים אוטומטית מתיקיית data
     data_folder = "data"
@@ -111,4 +111,5 @@ if check_password():
     if st.sidebar.button("התנתק"):
         st.session_state["password_correct"] = False
         st.rerun()
+
 
