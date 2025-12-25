@@ -51,7 +51,7 @@ def check_password():
             st.error("סיסמה שגויה")
     return False
 
-# 4. הרצת האפליקציה רק אם הסיסמה נכונה
+# 4. הרצת האפליקציה (שימוש בהזחה מדויקת)
 if check_password():
     if os.path.exists("logo.png"):
         st.image("logo.png", width=150)
@@ -70,7 +70,6 @@ if check_password():
                     file_path = os.path.join(data_folder, f)
                     df = pd.read_excel(file_path)
                     df.columns = df.columns.astype(str).str.strip()
-                    # הסרנו את העמודה של שם הקובץ כפי שביקשת
                     all_data.append(df)
                 except Exception as e:
                     st.error(f"שגיאה בקריאת הקובץ {f}")
@@ -96,7 +95,7 @@ if check_password():
                 if search_id:
                     results = full_df[full_df[id_col] == search_id.strip()]
                     if not results.empty:
-                        st.dataframe(results, use_container_width=True)
+                        st.dataframe(results, use_container_width=True, hide_index=True)
                     else:
                         st.info("לא נמצאו תוצאות")
 
@@ -105,7 +104,7 @@ if check_password():
                     duplicates = full_df[full_df.duplicated(subset=[id_col], keep=False)]
                     if not duplicates.empty:
                         st.warning(f"נמצאו {duplicates[id_col].nunique()} כפולים")
-                        st.dataframe(duplicates.sort_values(by=id_col), use_container_width=True)
+                        st.dataframe(duplicates.sort_values(by=id_col), use_container_width=True, hide_index=True)
                     else:
                         st.success("אין כפילויות")
         else:
