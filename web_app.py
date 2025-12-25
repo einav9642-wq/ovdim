@@ -73,4 +73,22 @@ if all_data:
             if sid:
                 res = df[df[id_col] == sid.strip()]
                 if not res.empty:
-                    st.dataframe(res, use_container
+                    st.dataframe(res, use_container_width=True, hide_index=True)
+                else:
+                    st.info("לא נמצאו תוצאות")
+        
+        with t2:
+            if st.button("בצע בדיקת כפילויות"):
+                dups = df[df.duplicated(subset=[id_col], keep=False)]
+                if not dups.empty:
+                    st.warning(f"נמצאו כפילויות")
+                    st.dataframe(dups.sort_values(by=id_col), use_container_width=True, hide_index=True)
+                else:
+                    st.success("אין כפילויות")
+else:
+    st.info("נא לוודא שיש קבצים בתיקיית data ב-GitHub")
+
+# כפתור התנתקות
+if st.sidebar.button("התנתק"):
+    st.session_state["password_correct"] = False
+    st.rerun()
