@@ -1,73 +1,39 @@
 import streamlit as st
 import pandas as pd
 import os
+
+# 1. הגדרות תצוגה
+st.set_page_config(page_title="מערכת ניתוח עובדים", layout="wide")
+
+# 2. עיצוב עברית וגופן Heebo
 def local_css():
     st.markdown(
         """
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap" rel="stylesheet">
-        
         <style>
-        /* הגדרת גופן וכיוון לכל האתר */
         html, body, [data-testid="stSidebar"], .main, stApp {
             direction: rtl;
             text-align: right;
             font-family: 'Heebo', sans-serif;
         }
-        
-        /* החלת הגופן על כותרות ורכיבי טקסט */
         h1, h2, h3, h4, p, label, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
             font-family: 'Heebo', sans-serif !important;
             direction: rtl;
             text-align: right !important;
         }
-
-        /* עיצוב כפתורים שייראו טוב יותר בעברית */
-        .stButton>button {
-            width: 100%;
-            border-radius: 10px;
-            font-weight: 700;
-        }
-
-        /* יישור תיבות הטקסט */
-        input {
-            text-align: right;
-        }
-        
-        /* סידור אייקונים ב-Sidebar שיתאימו לימין */
-        [data-testid="stSidebarNav"] {
-            direction: rtl;
-            text-align: right;
-        }
+        .stButton>button { width: 100%; border-radius: 10px; font-weight: 700; }
+        input { text-align: right; }
         </style>
         """,
         unsafe_allow_html=True
     )
 
-# הפעלת העיצוב (חשוב לקרוא לזה בתחילת הקוד)
 local_css()
-# 1. הגדרות תצוגה ויישור לימין (RTL)
-st.set_page_config(page_title="מערכת ניתוח עובדים", layout="wide")
 
-def set_rtl():
-    st.markdown(
-        """
-        <style>
-        .main .block-container { direction: rtl; text-align: right; }
-        section[data-testid="stSidebar"] > div { direction: rtl; text-align: right; }
-        .stDataFrame { direction: rtl; }
-        input { direction: rtl; }
-        div[data-testid="stExpander"] { direction: rtl; text-align: right; }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-set_rtl()
-
-# 2. הגדרת סיסמה
-PASSWORD = "123" # שנה לסיסמה שלך
+# 3. הגדרת סיסמה
+PASSWORD = "123"
 
 def check_password():
     if "password_correct" not in st.session_state:
@@ -85,18 +51,17 @@ def check_password():
             st.error("סיסמה שגויה")
     return False
 
+# 4. הרצת האפליקציה רק אם הסיסמה נכונה
 if check_password():
-    # הצגת לוגו בראש העמוד (ודא שיש קובץ בשם logo.png ב-GitHub)
     if os.path.exists("logo.png"):
-        st.image("logo.png", width=400)
+        st.image("logo.png", width=150)
     
-    st.title("🔍 איתור תביעות כפולות")
+    st.title("🔍 מערכת ניתוח נתונים")
     
-    # 3. טעינת נתונים אוטומטית מתיקיית data
     data_folder = "data"
     all_data = []
 
-      if os.path.exists(data_folder):
+    if os.path.exists(data_folder):
         excel_files = [f for f in os.listdir(data_folder) if f.endswith(('.xlsx', '.xls'))]
         
         if excel_files:
@@ -105,23 +70,19 @@ if check_password():
                     file_path = os.path.join(data_folder, f)
                     df = pd.read_excel(file_path)
                     df.columns = df.columns.astype(str).str.strip()
-                    
-                    # מחקנו את השורה: df['מקור הקובץ'] = f
-                    
+                    # הסרנו את העמודה של שם הקובץ כפי שביקשת
                     all_data.append(df)
                 except Exception as e:
-                    st.error(f"שגיאה בקריאת הקובץ {f}: {e}")
+                    st.error(f"שגיאה בקריאת הקובץ {f}")
             
-            st.sidebar.success(f"נטענו {len(excel_files)} קבצים מהמאגר")
+            st.sidebar.success(f"נטענו {len(excel_files)} קבצים")
         else:
-            st.sidebar.warning("לא נמצאו קבצי אקסל בתיקיית data")
+            st.sidebar.warning("תיקיית data ריקה")
     else:
-        st.sidebar.error("תיקיית data לא קיימת ב-GitHub")
+        st.sidebar.error("תיקיית data לא קיימת")
 
     if all_data:
         full_df = pd.concat(all_data, ignore_index=True)
-        
-        # זיהוי עמודת ת.ז
         possible_id_columns = ['ת.ז', 'ת.ז.', 'תעודת זהות', 'ID', 'מספר זהות']
         id_col = next((col for col in possible_id_columns if col in full_df.columns), None)
 
@@ -135,30 +96,21 @@ if check_password():
                 if search_id:
                     results = full_df[full_df[id_col] == search_id.strip()]
                     if not results.empty:
-                        st.success(f"נמצאו {len(results)} רשומות:")
                         st.dataframe(results, use_container_width=True)
                     else:
-                        st.info("לא נמצאו נתונים עבור ת.ז זו במאגר")
+                        st.info("לא נמצאו תוצאות")
 
             with tab2:
-                st.write("בדיקה האם קיימים עובדים המופיעים ביותר מקובץ אחד או בשורות כפולות.")
-                if st.button("בצע בדיקת כפילויות גלובלית"):
+                if st.button("בדוק כפילויות"):
                     duplicates = full_df[full_df.duplicated(subset=[id_col], keep=False)]
                     if not duplicates.empty:
-                        st.warning(f"נמצאו {duplicates[id_col].nunique()} מספרי ת.ז כפולים")
+                        st.warning(f"נמצאו {duplicates[id_col].nunique()} כפולים")
                         st.dataframe(duplicates.sort_values(by=id_col), use_container_width=True)
-                        
-                        csv = duplicates.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button("הורד דוח כפילויות (CSV)", data=csv, file_name="duplicates_report.csv")
                     else:
-                        st.success("לא נמצאו כפילויות במאגר הנוכחי")
+                        st.success("אין כפילויות")
         else:
-            st.error("לא נמצאה עמודת ת.ז באף אחד מהקבצים")
+            st.error("לא נמצאה עמודת ת.ז")
     
     if st.sidebar.button("התנתק"):
         st.session_state["password_correct"] = False
         st.rerun()
-
-
-
-
