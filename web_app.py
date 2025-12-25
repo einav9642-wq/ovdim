@@ -2,24 +2,51 @@ import streamlit as st
 import pandas as pd
 import os
 
-# 1. הגדרות דף
-st.set_page_config(page_title="מערכת עובדים", layout="wide")
+# 1. הגדרות דף רחב
+st.set_page_config(page_title="מערכת ניהול עובדים", layout="wide")
 
-# 2. עיצוב (CSS) פשוט ונקי למניעת שגיאות תצוגה
+# 2. עיצוב עברית (RTL), גופן Heebo והגדלת רכיבים
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap');
+    
+    /* יישור כללי לימין */
     html, body, [data-testid="stSidebar"], .main {
         direction: rtl;
         text-align: right;
         font-family: 'Heebo', sans-serif;
     }
-    div.stButton > button { width: 100%; border-radius: 10px; }
-    input { text-align: right; direction: rtl; }
+
+    /* יישור תיבות טקסט ותוויות */
+    .stTextInput label, .stSelectbox label, .stMultiSelect label {
+        text-align: right !important;
+        display: block;
+    }
+    
+    input {
+        direction: rtl !important;
+        text-align: right !important;
+    }
+
+    /* יישור כפתורים וטבלאות */
+    div.stButton > button {
+        width: 100%;
+        border-radius: 10px;
+    }
+    
+    .stDataFrame, [data-testid="stTable"] {
+        direction: rtl;
+        text-align: right;
+    }
+
+    /* תיקון ללשוניות (Tabs) שיהיו מימין לשמאל */
+    button[data-baseweb="tab"] {
+        direction: rtl;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. מערכת סיסמה
+# 3. מנגנון סיסמה
 if "password_correct" not in st.session_state:
     st.session_state["password_correct"] = False
 
@@ -34,15 +61,15 @@ if not st.session_state["password_correct"]:
             st.error("סיסמה שגויה")
     st.stop()
 
-# --- אם הגענו כאן, המשתמש מחובר ---
+# --- תוכן האתר (מוצג רק לאחר התחברות) ---
 
-# 4. לוגו וכותרת
+# 4. לוגו (מוגדל ל-450) וכותרת
 if os.path.exists("logo.png"):
-    st.image("logo.png", width=150)
+    st.image("logo.png", width=450)
 
-st.title("🔍 מערכת ניתוח נתונים")
+st.title("🔍 מערכת ניתוח ובקרת נתונים")
 
-# 5. טעינת נתונים
+# 5. טעינת נתונים אוטומטית מתיקיית data
 data_folder = "data"
 all_data = []
 
@@ -59,36 +86,40 @@ if os.path.exists(data_folder):
 if all_data:
     df = pd.concat(all_data, ignore_index=True)
     
-    # חיפוש עמודת ת"ז
+    # חיפוש עמודת ת"ז לפי שמות נפוצים
     id_cols = ['ת.ז', 'ת.ז.', 'תעודת זהות', 'ID', 'מספר זהות']
     id_col = next((c for c in id_cols if c in df.columns), None)
 
     if id_col:
+        # ניקוי נתוני ת"ז
         df[id_col] = df[id_col].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
         
-        t1, t2 = st.tabs(["🔎 חיפוש", "👯 כפילויות"])
+        # תפריט לשוניות
+        t1, t2 = st.tabs(["🔎 חיפוש פרטני", "👯 איתור כפילויות"])
         
         with t1:
-            sid = st.text_input("חפש לפי תעודת זהות:")
+            sid = st.text_input("הכנס תעודת זהות לחיפוש:")
             if sid:
                 res = df[df[id_col] == sid.strip()]
                 if not res.empty:
+                    st.success(f"נמצאו {len(res)} רשומות")
                     st.dataframe(res, use_container_width=True, hide_index=True)
                 else:
-                    st.info("לא נמצאו תוצאות")
+                    st.info("לא נמצאו תוצאות עבור ת"ז זו")
         
         with t2:
-            if st.button("בצע בדיקת כפילויות"):
+            st.write("בדיקת כפילויות על בסיס מספר תעודת זהות")
+            if st.button("בצע סריקת כפילויות"):
                 dups = df[df.duplicated(subset=[id_col], keep=False)]
                 if not dups.empty:
-                    st.warning(f"נמצאו כפילויות")
+                    st.warning(f"נמצאו כפילויות במאגר")
                     st.dataframe(dups.sort_values(by=id_col), use_container_width=True, hide_index=True)
                 else:
-                    st.success("אין כפילויות")
+                    st.success("לא נמצאו כפילויות - המאגר תקין")
 else:
-    st.info("נא לוודא שיש קבצים בתיקיית data ב-GitHub")
+    st.warning("נא לוודא שקיימים קבצי אקסל בתיקיית data ב-GitHub")
 
-# כפתור התנתקות
+# כפתור התנתקות בתפריט הצד
 if st.sidebar.button("התנתק"):
     st.session_state["password_correct"] = False
     st.rerun()
