@@ -96,7 +96,7 @@ if check_password():
     data_folder = "data"
     all_data = []
 
-    if os.path.exists(data_folder):
+      if os.path.exists(data_folder):
         excel_files = [f for f in os.listdir(data_folder) if f.endswith(('.xlsx', '.xls'))]
         
         if excel_files:
@@ -105,7 +105,9 @@ if check_password():
                     file_path = os.path.join(data_folder, f)
                     df = pd.read_excel(file_path)
                     df.columns = df.columns.astype(str).str.strip()
-                    df['מקור הקובץ'] = f
+                    
+                    # מחקנו את השורה: df['מקור הקובץ'] = f
+                    
                     all_data.append(df)
                 except Exception as e:
                     st.error(f"שגיאה בקריאת הקובץ {f}: {e}")
@@ -156,6 +158,7 @@ if check_password():
     if st.sidebar.button("התנתק"):
         st.session_state["password_correct"] = False
         st.rerun()
+
 
 
 
