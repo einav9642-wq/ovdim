@@ -105,17 +105,19 @@ if all_data:
                     st.success(f"נמצאו {len(res)} רשומות")
                     st.dataframe(res, use_container_width=True, hide_index=True)
                 else:
-                    st.info("לא נמצאו תוצאות עבור ת"ז זו")
+                    st.info("לא נמצאו תוצאות עבור תז זו")
         
         with t2:
             st.write("בדיקת כפילויות על בסיס מספר תעודת זהות")
             if st.button("בצע סריקת כפילויות"):
                 dups = df[df.duplicated(subset=[id_col], keep=False)]
                 if not dups.empty:
-                    st.warning(f"נמצאו כפילויות במאגר")
+                    st.warning("נמצאו כפילויות במאגר")
                     st.dataframe(dups.sort_values(by=id_col), use_container_width=True, hide_index=True)
                 else:
                     st.success("לא נמצאו כפילויות - המאגר תקין")
+    else:
+        st.error("לא נמצאה עמודת תעודת זהות בקבצים")
 else:
     st.warning("נא לוודא שקיימים קבצי אקסל בתיקיית data ב-GitHub")
 
