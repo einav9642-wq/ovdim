@@ -105,7 +105,7 @@ if all_data:
                     st.success(f"נמצאו {len(res)} רשומות")
                     st.dataframe(res, use_container_width=True, hide_index=True)
                 else:
-                    st.info("לא נמצאו תוצאות עבור תז זו")
+                    st.info("לא נמצאו תוצאות עבור מספר זהות זה")
         
         with t2:
             st.write("בדיקת כפילויות על בסיס מספר תעודת זהות")
