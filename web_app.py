@@ -1,7 +1,21 @@
 import streamlit as st
 import pandas as pd
 import os
+uploaded_file = st.file_uploader("בחר קובץ אקסל")
 
+if uploaded_file is not None:
+    # הגדרת הנתיב שבו נרצה לשמור (תיקיית data בתוך הפרויקט)
+    folder_path = "data"
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        
+    file_path = os.path.join(folder_path, uploaded_file.name)
+    
+    # כתיבת הקובץ לתיקייה
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+        
+    st.success(f"הקובץ נשמר בהצלחה בכתובת: {file_path}")
 # 1. הגדרות תצוגה
 st.set_page_config(page_title="מערכת ניתוח עובדים", layout="wide")
 
@@ -139,3 +153,4 @@ if all_data:
 if st.sidebar.button("התנתק"):
     st.session_state["password_correct"] = False
     st.rerun()
+
