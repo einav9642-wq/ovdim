@@ -12,6 +12,8 @@ def load_data():
         try:
             df = pd.read_excel(DATA_FILE)
             df.columns = df.columns.astype(str).str.strip()
+            # החלפת NaN ו-None בטקסט ריק לתצוגה נקייה
+            df = df.fillna('')
             return df
         except:
             return pd.DataFrame()
@@ -34,17 +36,20 @@ def process_and_filter(uploaded_file):
     }
     df.rename(columns=rename_map, inplace=True)
     
-    # חובה שיהיה תעודת זהות
+    # חובה שיהיה תעודת זהות (הסרת ריקים רק מהעמודה הזו לפני העיבוד)
     if 'תעודת זהות' in df.columns:
         df = df.dropna(subset=['תעודת זהות'])
         df = df[df['תעודת זהות'].astype(str).str.strip() != '']
     
     required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
     existing_in_df = [c for c in required if c in df.columns]
-    return df[existing_in_df]
+    
+    # ניקוי NaN גם בשלב העיבוד
+    df_filtered = df[existing_in_df].fillna('')
+    return df_filtered
 
 # --- ממשק המשתמש ---
-st.title('📂 מערכת איתור כפילויות (ת.ז חובה)')
+st.title('📂 מערכת איתור כפילויות - תצוגה נקייה')
 
 with st.sidebar:
     st.header('1. ניהול נתונים')
@@ -89,12 +94,14 @@ if not master_df.empty:
     
     if st.button('🔍 הצג רשומות כפולות'):
         if 'תעודת זהות' in master_df.columns:
+            # וידוא שכל ה-ID הם טקסט ללא רווחים
             master_df['תעודת זהות'] = master_df['תעודת זהות'].astype(str).str.strip()
-            is_duplicate = master_df.duplicated(subset=['תעודת זהות'], keep=False)
-            dupes = master_df[is_duplicate].copy()
+            # איתור כפילויות (מתעלם מתאים שהם טקסט ריק)
+            valid_ids = master_df[master_df['תעודת זהות'] != '']
+            is_duplicate = valid_ids.duplicated(subset=['תעודת זהות'], keep=False)
+            dupes = valid_ids[is_duplicate].copy()
             
             if not dupes.empty:
-                # מיון דינמי - רק לפי מה שקיים (פותר את ה-KeyError)
                 sort_cols = [c for c in ['תעודת זהות', 'מקום העסקה'] if c in dupes.columns]
                 dupes_sorted = dupes.sort_values(by=sort_cols)
                 
@@ -103,6 +110,7 @@ if not master_df.empty:
                 display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
                 final_cols = [c for c in display_cols if c in dupes_sorted.columns]
                 
+                # הצגת הטבלה ללא NaN
                 st.dataframe(dupes_sorted[final_cols], use_container_width=True)
                 
                 output = io.BytesIO()
@@ -112,7 +120,7 @@ if not master_df.empty:
             else:
                 st.success('אין כפילויות במערכת.')
         else:
-            st.error('לא נמצאה עמודת תעודת זהות במאגר.')
+            st.error('לא נמצאה עמודת תעודת זהות.')
 
     with st.expander('צפה במאגר המלא'):
         st.write(master_df)
