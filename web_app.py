@@ -32,18 +32,19 @@ if not master_df.empty:
             display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
             st.dataframe(duplicates_sorted[display_cols], use_container_width=True)
             
-            # אפשרות ייצא לדו"ח אקסל של הכפילויות בלבד
+         # אפשרות ייצוא לדו"ח אקסל של הכפילויות בלבד
             with pd.ExcelWriter("duplicates_report.xlsx") as writer:
                 duplicates_sorted.to_excel(writer, index=False)
             
             with open("duplicates_report.xlsx", "rb") as file:
                 st.download_button(
-                    label="📥 הורד דו"ח כפילויות לאקסל",
+                    label='📥 הורד דו"ח כפילויות לאקסל', # שימוש בגרש בודד בחוץ פותר את הבעיה
                     data=file,
-                    file_name="כפילויות_עובדים.xlsx",
+                    file_name="duplicates_report.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
         else:
             st.success("לא נמצאו מספרי תעודת זהות כפולים. כל עובד מופיע פעם אחת בלבד.")
 else:
     st.info("המאגר ריק. אנא העלה נתונים כדי לבצע בדיקת כפילויות.")
+
