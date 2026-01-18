@@ -7,15 +7,13 @@ import io
 st.set_page_config(page_title='ניהול נתוני עובדים', layout='wide')
 DATA_FILE = 'master_data.xlsx'
 
-# --- פונקציות עזר ---
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_excel(DATA_FILE)
             df.columns = df.columns.astype(str).str.strip()
             return df
-        except:
-            return pd.DataFrame()
+        except: return pd.DataFrame()
     return pd.DataFrame()
 
 def save_data(df):
@@ -24,17 +22,10 @@ def save_data(df):
 def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.astype(str).str.strip()
-    rename_map = {
-        'ת.ז': 'תעודת זהות',
-        'מספר זהות': 'תעודת זהות',
-        'שם עובד': 'שם',
-        'מעסיק': 'מקום העסקה',
-        'תקופה': 'תקופת העסקה'
-    }
+    rename_map = {'ת.ז': 'תעודת זהות', 'מספר זהות': 'תעודת זהות', 'שם עובד': 'שם', 'מעסיק': 'מקום העסקה', 'תקופה': 'תקופת העסקה'}
     df.rename(columns=rename_map, inplace=True)
-    required_columns = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
-    existing_cols = [col for col in required_columns if col in df.columns]
-    return df[existing_cols]
+    required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
+    return df[[c for c in required if c in df.columns]]
 
 # --- ממשק המשתמש ---
 st.title('📂 מערכת לניהול וניתוח נתוני עובדים')
@@ -42,95 +33,85 @@ st.title('📂 מערכת לניהול וניתוח נתוני עובדים')
 with st.sidebar:
     st.header('1. ניהול נתונים')
     uploaded_file = st.file_uploader('העלה קובץ אקסל חדש', type=['xlsx'])
-    if uploaded_file:
-        if st.button('✅ הוסף למאגר'):
-            new_data = process_and_filter(uploaded_file)
-            current_df = load_data()
-            combined_df = pd.concat([current_df, new_data], ignore_index=True)
-            save_data(combined_df)
-            st.success('הנתונים נוספו!')
-            st.rerun()
-
-    st.divider()
-    if st.button('🗑️ איפוס מאגר הנתונים'):
-        if os.path.exists(DATA_FILE):
-            os.remove(DATA_FILE)
-            st.session_state.clear() # ניקוי הזיכרון הזמני
-            st.rerun()
+    if uploaded_file and st.button('✅ הוסף למאגר'):
+        new_data = process_and_filter(uploaded_file)
+        current_df = load_data()
+        save_data(pd.concat([current_df, new_data], ignore_index=True))
+        st.success('הנתונים נוספו!')
+        st.rerun()
+    if st.button('🗑️ איפוס מאגר'):
+        if os.path.exists(DATA_FILE): os.remove(DATA_FILE)
+        st.session_state.clear()
+        st.rerun()
 
 master_df = load_data()
 
 if not master_df.empty:
-    # --- חלק 2: חיפוש ---
+    # --- חיפוש ---
     st.subheader('🔍 חיפוש עובד')
     col1, col2 = st.columns(2)
-    with col1:
-        s_name = st.text_input('חפש לפי שם')
-    with col2:
-        s_id = st.text_input('חפש לפי תעודת זהות')
+    with col1: s_name = st.text_input('חפש לפי שם')
+    with col2: s_id = st.text_input('חפש לפי תעודת זהות')
     
     if s_name or s_id:
         res = master_df.copy()
-        if s_name:
-            res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
-        if s_id:
-            res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
-        
-        if not res.empty:
-            st.write(f'נמצאו {len(res)} תוצאות:')
-            st.dataframe(res, use_container_width=True)
-        else:
-            st.info('לא נמצאו תוצאות לחיפוש זה.')
+        if s_name: res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
+        if s_id: res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
+        st.dataframe(res, use_container_width=True)
 
     st.divider()
 
-    # --- חלק 3: איתור כפילויות ממוקד ---
+    # --- איתור כפילויות ---
     st.subheader('👥 איתור כפילויות')
     
-    # כפתור שמפעיל את הבדיקה
-    if st.button('🔍 אתר והצג כפילויות בלבד'):
+    if st.button('🔍 נתח כפילויות'):
         if 'תעודת זהות' in master_df.columns:
-            # סינון הרשימה לכפילויות בלבד
+            # מציאת הכפולים
             is_duplicate = master_df.duplicated(subset=['תעודת זהות'], keep=False)
             dupes = master_df[is_duplicate].copy()
             
             if not dupes.empty:
-                # שמירה בזיכרון הזמני של האפליקציה
-                st.session_state['dupes_view'] = dupes.sort_values(by=['תעודת זהות'])
+                # יצירת סיכום: שורה אחת לכל עובד כפול
+                summary = dupes.groupby('תעודת זהות').agg({
+                    'שם': 'first',
+                    'מקום העסקה': lambda x: ', '.join(x.astype(str).unique()),
+                    'תקופת העסקה': 'count' # סופר כמה רשומות יש
+                }).reset_index()
+                summary.rename(columns={'תקופת העסקה': 'מספר רשומות במאגר'}, inplace=True)
+                
+                st.session_state['dupes_summary'] = summary
+                st.session_state['dupes_full'] = dupes.sort_values(by='תעודת זהות')
             else:
-                st.session_state['dupes_view'] = 'empty'
+                st.session_state['dupes_summary'] = 'empty'
         else:
             st.error('עמודת תעודת זהות חסרה.')
 
-    # הצגת התוצאות מהזיכרון הזמני (רק אם נמצאו כפילויות)
-    if 'dupes_view' in st.session_state:
-        if isinstance(st.session_state['dupes_view'], pd.DataFrame):
-            df_dupes = st.session_state['dupes_view']
-            st.warning(f'נמצאו {df_dupes["תעודת זהות"].nunique()} עובדים עם רשומות כפולות (סה"כ {len(df_dupes)} שורות):')
+    # תצוגת התוצאות
+    if 'dupes_summary' in st.session_state:
+        if isinstance(st.session_state['dupes_summary'], pd.DataFrame):
+            st.warning(f"נמצאו {len(st.session_state['dupes_summary'])} עובדים כפולים.")
             
-            display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
-            final_cols = [c for c in display_cols if c in df_dupes.columns]
+            tab1, tab2 = st.tabs(["📋 טבלת סיכום (5 שורות)", "📄 כל הרשומות (236 שורות)"])
             
-            # הצגת הטבלה המסוננת בלבד
-            st.dataframe(df_dupes[final_cols], use_container_width=True)
+            with tab1:
+                st.write("סיכום העובדים הכפולים:")
+                st.dataframe(st.session_state['dupes_summary'], use_container_width=True)
             
-            # ייצוא לאקסל
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_dupes[final_cols].to_excel(writer, index=False)
-            
-            st.download_button(
-                label='📥 הורד את רשימת הכפילויות בלבד לאקסל',
-                data=output.getvalue(),
-                file_name='duplicate_workers.xlsx',
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-        elif st.session_state['dupes_view'] == 'empty':
-            st.success('לא נמצאו כפילויות. כל עובד מופיע פעם אחת בלבד.')
+            with tab2:
+                st.write("פירוט מלא של כל המופעים:")
+                st.dataframe(st.session_state['dupes_full'], use_container_width=True)
+                
+                # ייצוא של הפירוט המלא
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    st.session_state['dupes_full'].to_excel(writer, index=False)
+                st.download_button('📥 הורד פירוט מלא לאקסל', output.getvalue(), 'full_duplicates.xlsx')
+                
+        elif st.session_state['dupes_summary'] == 'empty':
+            st.success('לא נמצאו כפילויות.')
 
     st.divider()
-    with st.expander('צפה בכל נתוני המאגר (ניהול פנימי)'):
+    with st.expander('צפה במאגר המלא'):
         st.write(master_df)
-
 else:
-    st.info('המערכת מוכנה. אנא העלה קובץ אקסל דרך התפריט בצד כדי להתחיל.')
+    st.info('המערכת מוכנה. העלה קובץ אקסל כדי להתחיל.')
