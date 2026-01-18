@@ -11,10 +11,12 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_excel(DATA_FILE)
+            # ניקוי שמות עמודות
             df.columns = df.columns.astype(str).str.strip()
-            # החלפת NaN ו-None בטקסט ריק לתצוגה נקייה
-            df = df.fillna('')
-            return df
+            # המרה כפויה של ת.ז לטקסט נקי כדי למנוע אובדן נתונים
+            if 'תעודת זהות' in df.columns:
+                df['תעודת זהות'] = df['תעודת זהות'].astype(str).str.replace('.0', '', regex=False).str.strip()
+            return df.fillna('')
         except:
             return pd.DataFrame()
     return pd.DataFrame()
@@ -26,30 +28,33 @@ def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.astype(str).str.strip()
     
-    # נרמול שמות עמודות מורחב
+    # מפת דרכים לנרמול שמות עמודות
     rename_map = {
         'ת.ז': 'תעודת זהות', 'ת"ז': 'תעודת זהות', 'תז': 'תעודת זהות',
-        'מספר זהות': 'תעודת זהות', 'מס זהות': 'תעודת זהות', "מס' זהות": 'תעודת זהות',
-        'שם עובד': 'שם', 'שם מלא': 'שם',
-        'מעסיק': 'מקום העסקה', 'חברה': 'מקום העסקה', 'שם מעסיק': 'מקום העסקה',
-        'תקופה': 'תקופת העסקה', 'שנה': 'תקופת העסקה', 'תאריך': 'תקופת העסקה'
+        'מספר זהות': 'תעודת זהות', 'מס' זהות': 'תעודת זהות',
+        'שם עובד': 'שם', 'שם מלא': 'שם', 'שם': 'שם',
+        'מעסיק': 'מקום העסקה', 'חברה': 'מקום העסקה',
+        'תקופה': 'תקופת העסקה', 'שנה': 'תקופת העסקה'
     }
     df.rename(columns=rename_map, inplace=True)
     
-    # חובה שיהיה תעודת זהות (הסרת ריקים רק מהעמודה הזו לפני העיבוד)
+    # טיפול קפדני בעמודת תעודת זהות
     if 'תעודת זהות' in df.columns:
+        # הסרת שורות ריקות לגמרי בת"ז
         df = df.dropna(subset=['תעודת זהות'])
-        df = df[df['תעודת זהות'].astype(str).str.strip() != '']
+        # המרה לטקסט וניקוי שאריות של מספרים עשרוניים (כמו .0)
+        df['תעודת זהות'] = df['תעודת זהות'].astype(str).str.replace('.0', '', regex=False).str.strip()
+        # סינון שורות שנותרו ריקות אחרי הניקוי
+        df = df[df['תעודת זהות'] != '']
     
+    # הגדרת עמודות חובה להצגה
     required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
-    existing_in_df = [c for c in required if c in df.columns]
+    existing = [c for c in required if c in df.columns]
     
-    # ניקוי NaN גם בשלב העיבוד
-    df_filtered = df[existing_in_df].fillna('')
-    return df_filtered
+    return df[existing].fillna('')
 
 # --- ממשק המשתמש ---
-st.title('📂 מערכת איתור כפילויות - תצוגה נקייה')
+st.title('📂 מערכת איתור כפילויות - תיקון שמות ות"ז')
 
 with st.sidebar:
     st.header('1. ניהול נתונים')
@@ -58,11 +63,13 @@ with st.sidebar:
         new_data = process_and_filter(uploaded_file)
         if not new_data.empty:
             current_df = load_data()
-            save_data(pd.concat([current_df, new_data], ignore_index=True))
-            st.success(f'נוספו {len(new_data)} רשומות תקינות.')
+            # איחוד המאגרים
+            combined = pd.concat([current_df, new_data], ignore_index=True)
+            save_data(combined)
+            st.success(f'נוספו {len(new_data)} רשומות. המערכת מוכנה לבדיקה.')
             st.rerun()
         else:
-            st.error('לא נמצאו רשומות עם ת.ז תקין.')
+            st.error('לא נמצאו נתונים תקינים בקובץ (ודא שיש עמודת ת.ז).')
     
     if st.button('🗑️ איפוס מאגר'):
         if os.path.exists(DATA_FILE):
@@ -74,55 +81,55 @@ master_df = load_data()
 
 if not master_df.empty:
     # --- חיפוש ---
-    st.subheader('🔍 חיפוש עובד')
+    st.subheader('🔍 חיפוש מהיר')
     c1, c2 = st.columns(2)
     with c1: s_name = st.text_input('לפי שם')
     with c2: s_id = st.text_input('לפי תעודת זהות')
     
     if s_name or s_id:
         res = master_df.copy()
-        if s_name and 'שם' in res.columns: 
+        if s_name and 'שם' in res.columns:
             res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
-        if s_id and 'תעודת זהות' in res.columns: 
+        if s_id and 'תעודת זהות' in res.columns:
             res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
         st.dataframe(res, use_container_width=True)
 
     st.divider()
 
     # --- איתור כפילויות ---
-    st.subheader('👥 איתור כפילויות לפי ת.ז')
+    st.subheader('👥 איתור רשומות כפולות')
     
-    if st.button('🔍 הצג רשומות כפולות'):
+    if st.button('🔍 אתר כפילויות עכשיו'):
         if 'תעודת זהות' in master_df.columns:
-            # וידוא שכל ה-ID הם טקסט ללא רווחים
-            master_df['תעודת זהות'] = master_df['תעודת זהות'].astype(str).str.strip()
-            # איתור כפילויות (מתעלם מתאים שהם טקסט ריק)
-            valid_ids = master_df[master_df['תעודת זהות'] != '']
-            is_duplicate = valid_ids.duplicated(subset=['תעודת זהות'], keep=False)
-            dupes = valid_ids[is_duplicate].copy()
+            # איתור כפילויות רק למי שיש לו ת"ז תקין
+            valid_df = master_df[master_df['תעודת זהות'] != '']
+            is_duplicate = valid_df.duplicated(subset=['תעודת זהות'], keep=False)
+            dupes = valid_df[is_duplicate].copy()
             
             if not dupes.empty:
+                # מיון כדי לראות את כל המופעים של אותו אדם ברצף
                 sort_cols = [c for c in ['תעודת זהות', 'מקום העסקה'] if c in dupes.columns]
                 dupes_sorted = dupes.sort_values(by=sort_cols)
                 
-                st.warning(f'נמצאו {dupes["תעודת זהות"].nunique()} עובדים כפולים.')
+                st.warning(f'נמצאו {dupes["תעודת זהות"].nunique()} עובדים המופיעים ביותר ממקום אחד.')
                 
+                # הצגת העמודות כולל השם
                 display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
                 final_cols = [c for c in display_cols if c in dupes_sorted.columns]
                 
-                # הצגת הטבלה ללא NaN
                 st.dataframe(dupes_sorted[final_cols], use_container_width=True)
                 
+                # כפתור הורדה
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     dupes_sorted[final_cols].to_excel(writer, index=False)
-                st.download_button('📥 הורד את הכפילויות לאקסל', output.getvalue(), 'duplicates.xlsx')
+                st.download_button('📥 הורד את רשימת הכפילויות לאקסל', output.getvalue(), 'duplicates.xlsx')
             else:
-                st.success('אין כפילויות במערכת.')
+                st.success('לא נמצאו כפילויות. כל עובד ייחודי במאגר.')
         else:
-            st.error('לא נמצאה עמודת תעודת זהות.')
+            st.error('עמודת תעודת זהות לא זוהתה.')
 
     with st.expander('צפה במאגר המלא'):
         st.write(master_df)
 else:
-    st.info('המערכת ריקה.')
+    st.info('המאגר ריק. העלה קובץ אקסל כדי להתחיל.')
