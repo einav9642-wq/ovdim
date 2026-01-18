@@ -62,8 +62,9 @@ with st.sidebar:
 
 master_df = load_data()
 
+# מסך פתיחה נקי - אין נתונים מוצגים מיד
 if not master_df.empty:
-    # --- חלק 2: חיפוש (מופיע רק אם יש קלט) ---
+    # --- חלק 2: חיפוש ---
     st.subheader("🔍 חיפוש עובד")
     col1, col2 = st.columns(2)
     with col1:
@@ -71,13 +72,12 @@ if not master_df.empty:
     with col2:
         s_id = st.text_input("חפש לפי תעודת זהות")
     
-    # הצגת תוצאות חיפוש רק אם המשתמש הזין טקסט
     if s_name or s_id:
         res = master_df.copy()
         if s_name:
-            res = res[res['שם'].astype(str).str.contains(s_name, na=False)] if 'שם' in res.columns else res
+            res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
         if s_id:
-            res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)] if 'תעודת זהות' in res.columns else res
+            res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
         
         if not res.empty:
             st.write(f"נמצאו {len(res)} תוצאות:")
@@ -87,23 +87,29 @@ if not master_df.empty:
 
     st.divider()
 
-    # --- חלק 3: איתור כפילויות ---
+    # --- חלק 3: איתור כפילויות (רק הכפולים יוצגו כאן) ---
     st.subheader("👥 איתור כפילויות במערכת")
     
     if st.button("🔍 הצג רשימת כפילויות בלבד"):
         if 'תעודת זהות' in master_df.columns:
-            dupes = master_df[master_df.duplicated(subset=['תעודת זהות'], keep=False)]
+            # פקודת הקסם: keep=False מסמן את כל המופעים של ת"ז שחוזרת על עצמה
+            is_duplicate = master_df.duplicated(subset=['תעודת זהות'], keep=False)
+            dupes = master_df[is_duplicate].copy()
             
             if not dupes.empty:
                 st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים עם רשומות כפולות:")
+                
+                # מיון כדי לראות את ההיסטוריה של כל עובד ברצף
                 dupes_sorted = dupes.sort_values(by=['תעודת זהות'])
                 
+                # הגדרת העמודות להצגה
                 display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
                 final_cols = [c for c in display_cols if c in dupes_sorted.columns]
                 
+                # הצגת הטבלה המסוננת בלבד
                 st.dataframe(dupes_sorted[final_cols], use_container_width=True)
                 
-                # ייצוא לאקסל
+                # ייצוא לאקסל של הכפילויות בלבד
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     dupes_sorted[final_cols].to_excel(writer, index=False)
@@ -115,14 +121,13 @@ if not master_df.empty:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             else:
-                st.success("לא נמצאו כפילויות במערכת.")
+                st.success("לא נמצאו כפילויות במערכת. כל עובד מופיע פעם אחת בלבד.")
         else:
             st.error("לא ניתן לבצע בדיקה - עמודת 'תעודת זהות' חסרה.")
 
-    # הצגת המאגר המלא - מוסתר בתוך Expander
     st.divider()
     with st.expander("צפה בכל נתוני המאגר (ניהול פנימי)"):
         st.write(master_df)
 
 else:
-    st.info("המערכת מוכנה. אנא העלה קובץ אקסל דרך התפריט בצד כדי להתחיל.")
+    st.info("המערכת
