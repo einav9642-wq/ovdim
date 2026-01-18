@@ -24,7 +24,6 @@ def save_data(df):
 def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.astype(str).str.strip()
-    
     rename_map = {
         'ת.ז': 'תעודת זהות',
         'מספר זהות': 'תעודת זהות',
@@ -33,7 +32,6 @@ def process_and_filter(uploaded_file):
         'תקופה': 'תקופת העסקה'
     }
     df.rename(columns=rename_map, inplace=True)
-    
     required_columns = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
     existing_cols = [col for col in required_columns if col in df.columns]
     return df[existing_cols]
@@ -57,12 +55,11 @@ with st.sidebar:
     if st.button('🗑️ איפוס מאגר הנתונים'):
         if os.path.exists(DATA_FILE):
             os.remove(DATA_FILE)
-            st.warning('המאגר אופס ונמחק.')
+            st.session_state.clear() # ניקוי הזיכרון הזמני
             st.rerun()
 
 master_df = load_data()
 
-# מסך פתיחה נקי
 if not master_df.empty:
     # --- חלק 2: חיפוש ---
     st.subheader('🔍 חיפוש עובד')
@@ -87,40 +84,49 @@ if not master_df.empty:
 
     st.divider()
 
-    # --- חלק 3: איתור כפילויות ---
-    st.subheader('👥 איתור כפילויות במערכת')
+    # --- חלק 3: איתור כפילויות ממוקד ---
+    st.subheader('👥 איתור כפילויות')
     
-    if st.button('🔍 הצג רשימת כפילויות בלבד'):
+    # כפתור שמפעיל את הבדיקה
+    if st.button('🔍 אתר והצג כפילויות בלבד'):
         if 'תעודת זהות' in master_df.columns:
-            # מציאת כל המופעים של תעודות זהות שחוזרות על עצמן
+            # סינון הרשימה לכפילויות בלבד
             is_duplicate = master_df.duplicated(subset=['תעודת זהות'], keep=False)
             dupes = master_df[is_duplicate].copy()
             
             if not dupes.empty:
-                st.warning(f'נמצאו {dupes["תעודת זהות"].nunique()} עובדים עם רשומות כפולות:')
-                dupes_sorted = dupes.sort_values(by=['תעודת זהות'])
-                
-                display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
-                final_cols = [c for c in display_cols if c in dupes_sorted.columns]
-                
-                # הצגת הטבלה המסוננת
-                st.dataframe(dupes_sorted[final_cols], use_container_width=True)
-                
-                # ייצוא לאקסל
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    dupes_sorted[final_cols].to_excel(writer, index=False)
-                
-                st.download_button(
-                    label='📥 הורד את רשימת הכפילויות לאקסל',
-                    data=output.getvalue(),
-                    file_name='duplicate_workers.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
+                # שמירה בזיכרון הזמני של האפליקציה
+                st.session_state['dupes_view'] = dupes.sort_values(by=['תעודת זהות'])
             else:
-                st.success('לא נמצאו כפילויות במערכת. כל עובד מופיע פעם אחת בלבד.')
+                st.session_state['dupes_view'] = 'empty'
         else:
-            st.error('לא ניתן לבצע בדיקה - עמודת תעודת זהות חסרה.')
+            st.error('עמודת תעודת זהות חסרה.')
+
+    # הצגת התוצאות מהזיכרון הזמני (רק אם נמצאו כפילויות)
+    if 'dupes_view' in st.session_state:
+        if isinstance(st.session_state['dupes_view'], pd.DataFrame):
+            df_dupes = st.session_state['dupes_view']
+            st.warning(f'נמצאו {df_dupes["תעודת זהות"].nunique()} עובדים עם רשומות כפולות (סה"כ {len(df_dupes)} שורות):')
+            
+            display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
+            final_cols = [c for c in display_cols if c in df_dupes.columns]
+            
+            # הצגת הטבלה המסוננת בלבד
+            st.dataframe(df_dupes[final_cols], use_container_width=True)
+            
+            # ייצוא לאקסל
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_dupes[final_cols].to_excel(writer, index=False)
+            
+            st.download_button(
+                label='📥 הורד את רשימת הכפילויות בלבד לאקסל',
+                data=output.getvalue(),
+                file_name='duplicate_workers.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+        elif st.session_state['dupes_view'] == 'empty':
+            st.success('לא נמצאו כפילויות. כל עובד מופיע פעם אחת בלבד.')
 
     st.divider()
     with st.expander('צפה בכל נתוני המאגר (ניהול פנימי)'):
