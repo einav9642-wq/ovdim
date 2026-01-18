@@ -11,7 +11,10 @@ DATA_FILE = "master_data.xlsx"
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
-            return pd.read_excel(DATA_FILE)
+            df = pd.read_excel(DATA_FILE)
+            # ניקוי רווחים משמות העמודות כדי למנוע KeyError
+            df.columns = df.columns.astype(str).str.strip()
+            return df
         except:
             return pd.DataFrame()
     return pd.DataFrame()
@@ -21,6 +24,9 @@ def save_data(df):
 
 def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
+    # ניקוי רווחים משמות העמודות בקובץ החדש
+    df.columns = df.columns.astype(str).str.strip()
+    
     rename_map = {
         'ת.ז': 'תעודת זהות',
         'מספר זהות': 'תעודת זהות',
@@ -29,14 +35,15 @@ def process_and_filter(uploaded_file):
         'תקופה': 'תקופת העסקה'
     }
     df.rename(columns=rename_map, inplace=True)
+    
     required_columns = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
+    # שומרים רק את מה שנמצא
     existing_cols = [col for col in required_columns if col in df.columns]
     return df[existing_cols]
 
-# --- ממשק המשתמש (UI) ---
+# --- ממשק המשתמש ---
 st.title("📂 מערכת ניתוח עובדים")
 
-# תפריט צד להעלאת קבצים
 with st.sidebar:
     st.header("1. ניהול נתונים")
     uploaded_file = st.file_uploader("העלה קובץ אקסל חדש", type=["xlsx"])
@@ -44,7 +51,7 @@ with st.sidebar:
         if st.button("✅ הוסף למאגר"):
             new_data = process_and_filter(uploaded_file)
             current_df = load_data()
-            combined_df = pd.concat([current_df, new_data]).reset_index(drop=True)
+            combined_df = pd.concat([current_df, new_data], ignore_index=True)
             save_data(combined_df)
             st.success("הנתונים נוספו!")
             st.rerun()
@@ -54,7 +61,6 @@ with st.sidebar:
             os.remove(DATA_FILE)
             st.rerun()
 
-# טעינת המאגר
 master_df = load_data()
 
 if not master_df.empty:
@@ -68,46 +74,46 @@ if not master_df.empty:
     
     res = master_df.copy()
     if s_name:
-        res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
+        res = res[res['שם'].astype(str).str.contains(s_name, na=False)] if 'שם' in res.columns else res
     if s_id:
-        res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
+        res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)] if 'תעודת זהות' in res.columns else res
     st.dataframe(res, use_container_width=True)
 
     st.divider()
 
-    # --- איתור כפילויות (הכפתור שחיפשת) ---
+    # --- איתור כפילויות ---
     st.subheader("3. איתור כפילויות (היסטוריית העסקה)")
     
-    # יצירת הכפתור
-    btn_detect = st.button("🔍 לחץ כאן לאיתור כפילויות")
-    
-    if btn_detect:
-        # לוגיקת מציאת כפילויות
-        dupes = master_df[master_df.duplicated(subset=['תעודת זהות'], keep=False)]
-        
-        if not dupes.empty:
-            st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים עם מספר רשומות.")
-            dupes_sorted = dupes.sort_values(by=['תעודת זהות', 'תקופת העסקה'])
+    if st.button("🔍 לחץ כאן לאיתור כפילויות"):
+        if 'תעודת זהות' in master_df.columns:
+            dupes = master_df[master_df.duplicated(subset=['תעודת זהות'], keep=False)]
             
-            # הצגת הטבלה
-            st.dataframe(dupes_sorted[['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']], use_container_width=True)
-            
-            # ייצוא לאקסל
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                dupes_sorted.to_excel(writer, index=False)
-            
-            st.download_button(
-                label='📥 הורד תוצאות איתור כפילויות לאקסל',
-                data=output.getvalue(),
-                file_name="duplicates_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            if not dupes.empty:
+                st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים עם מספר רשומות.")
+                dupes_sorted = dupes.sort_values(by=['תעודת זהות'])
+                
+                # בחירת עמודות להצגה רק אם הן קיימות (מונע KeyError)
+                display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
+                final_cols = [c for c in display_cols if c in dupes_sorted.columns]
+                
+                st.dataframe(dupes_sorted[final_cols], use_container_width=True)
+                
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    dupes_sorted.to_excel(writer, index=False)
+                
+                st.download_button(
+                    label='📥 הורד תוצאות איתור כפילויות לאקסל',
+                    data=output.getvalue(),
+                    file_name="duplicates_report.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.success("לא נמצאו כפילויות במערכת.")
         else:
-            st.success("לא נמצאו כפילויות במערכת.")
+            st.error("עמודת 'תעודת זהות' לא נמצאה במאגר. נסה לאפס את המאגר ולהעלות שוב.")
 
-    # הצגת המאגר המלא בסוף
-    with st.expander("צפה בכל המאגר המלא"):
+    with st.expander("צפה במאגר המלא"):
         st.write(master_df)
 else:
     st.info("המאגר ריק. העלה קובץ דרך התפריט בצד.")
