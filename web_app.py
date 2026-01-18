@@ -44,7 +44,7 @@ def process_and_filter(uploaded_file):
 
 # --- ממשק המשתמש (UI) ---
 
-st.title("📂 מערכת ניתוח עובדים והיסטוריית העסקה")
+st.title("📂 מערכת ניתוח עובדים - חיפוש ואיתור כפילויות")
 
 with st.sidebar:
     st.header("ניהול נתונים")
@@ -54,7 +54,6 @@ with st.sidebar:
         new_data = process_and_filter(uploaded_file)
         if st.button("✅ הוסף למאגר התוכנה"):
             current_df = load_data()
-            # חיבור נתונים (שומרים על כפילויות לצורך איתורן בהמשך)
             combined_df = pd.concat([current_df, new_data]).reset_index(drop=True)
             save_data(combined_df)
             st.success("הנתונים נוספו בהצלחה!")
@@ -68,12 +67,12 @@ with st.sidebar:
             st.warning("הקובץ נמחק מהספרייה.")
             st.rerun()
 
-# טעינת המאגר להצגה
+# טעינת המאגר
 master_df = load_data()
 
 if not master_df.empty:
-    # --- חלק 1: חיפוש עובדים ---
-    st.subheader("🔍 חיפוש עובד")
+    # --- חיפוש עובדים ---
+    st.subheader("🔍 חיפוש עובד מהיר")
     c1, c2 = st.columns(2)
     with c1:
         search_name = st.text_input("חפש לפי שם")
@@ -90,38 +89,42 @@ if not master_df.empty:
 
     st.divider()
 
-    # --- חלק 2: איתור כפילויות והיסטוריית העסקה ---
+    # --- איתור כפילויות וייצוא ---
     st.subheader("👥 איתור כפילויות והיסטוריית העסקה")
     
-    if st.button("אתר כפילויות"):
+    # כפתור איתור כפילויות מרכזי
+    if st.button("אתר כפילויות במערכת"):
         # מציאת כל המופעים של תעודות זהות שחוזרות על עצמן
-        duplicates = master_df[master_df.duplicated(subset=['תעודת זהות'], keep=False)]
+        dupes = master_df[master_df.duplicated(subset=['תעודת זהות'], keep=False)]
         
-        if not duplicates.empty:
-            st.warning(f"נמצאו {duplicates['תעודת זהות'].nunique()} עובדים עם מספר רשומות:")
+        if not dupes.empty:
+            st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים עם מספר רשומות כפולות:")
             
-            # מיון כדי לראות את ההיסטוריה של כל עובד ברצף
-            duplicates_sorted = duplicates.sort_values(by=['תעודת זהות', 'תקופת העסקה'])
+            # מיון כדי להציג את ההיסטוריה של כל עובד ברצף
+            dupes_sorted = dupes.sort_values(by=['תעודת זהות', 'תקופת העסקה'])
             
-            # הצגת הנתונים המבוקשים
-            st.dataframe(duplicates_sorted[['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']], use_container_width=True)
+            # הצגת הטבלה של הכפילויות בלבד
+            st.dataframe(dupes_sorted[['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']], use_container_width=True)
             
-            # יצירת קובץ להורדה
-            report_name = "duplicates_report.xlsx"
-            duplicates_sorted.to_excel(report_name, index=False)
-            
-            with open(report_name, "rb") as file:
-                st.download_button(
-                    label='📥 הורד דו"ח כפילויות לאקסל',
-                    data=file,
-                    file_name="כפילויות_עובדים.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+            # יצירת קובץ אקסל לייצוא בזיכרון (כדי שלא יכתוב קבצים מיותרים לשרת)
+            import io
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                dupes_sorted.to_excel(writer, index=False, sheet_name='כפילויות')
+            processed_data = output.getvalue()
+
+            # כפתור הורדה
+            st.download_button(
+                label='📥 ייצא תוצאות כפילויות לאקסל',
+                data=processed_data,
+                file_name="כפילויות_עובדים.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
-            st.success("לא נמצאו כפילויות. כל תעודת זהות מופיעה פעם אחת בלבד.")
+            st.success("לא נמצאו כפילויות. כל תעודת זהות ייחודית במערכת.")
 
     with st.expander("צפה במאגר המלא"):
         st.write(master_df)
 
 else:
-    st.info("המאגר ריק. אנא העלה קובץ אקסל דרך תפריט הצד כדי להתחיל.")
+    st.info("המאגר ריק. העלה קובץ אקסל כדי להתחיל.")
