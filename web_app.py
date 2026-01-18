@@ -23,19 +23,19 @@ def save_data(df):
 def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.astype(str).str.strip()
-    # מילון המרה מורחב לזיהוי מקומות עבודה
+    # נרמול עמודות - קריטי לזיהוי הנתונים שביקשת
     rename_map = {
         'ת.ז': 'תעודת זהות', 'מספר זהות': 'תעודת זהות', 
         'שם עובד': 'שם', 'שם מלא': 'שם',
         'מעסיק': 'מקום העסקה', 'שם מעסיק': 'מקום העסקה', 'חברה': 'מקום העסקה',
-        'תקופה': 'תקופת העסקה', 'שנה': 'תקופת העסקה'
+        'תקופה': 'תקופת העסקה', 'שנה': 'תקופת העסקה', 'תאריך': 'תקופת העסקה'
     }
     df.rename(columns=rename_map, inplace=True)
     required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
     return df[[c for c in required if c in df.columns]]
 
 # --- ממשק המשתמש ---
-st.title('📂 מערכת לניהול וניתוח נתוני עובדים')
+st.title('📂 מערכת לאיתור כפילויות והיסטוריית העסקה')
 
 with st.sidebar:
     st.header('1. ניהול נתונים')
@@ -44,9 +44,11 @@ with st.sidebar:
         new_data = process_and_filter(uploaded_file)
         current_df = load_data()
         save_data(pd.concat([current_df, new_data], ignore_index=True))
-        st.success('הנתונים נוספו!')
+        st.success('הנתונים נוספו למערכת!')
         st.rerun()
-    if st.button('🗑️ איפוס מאגר'):
+    
+    st.divider()
+    if st.button('🗑️ איפוס ומחיקת כל המאגר'):
         if os.path.exists(DATA_FILE):
             os.remove(DATA_FILE)
         st.session_state.clear()
@@ -55,80 +57,56 @@ with st.sidebar:
 master_df = load_data()
 
 if not master_df.empty:
-    # --- חיפוש ---
-    st.subheader('🔍 חיפוש עובד')
+    # --- חיפוש חופשי ---
+    st.subheader('🔍 חיפוש עובד ספציפי')
     col1, col2 = st.columns(2)
     with col1:
-        s_name = st.text_input('חפש לפי שם')
+        s_name = st.text_input('לפי שם')
     with col2:
-        s_id = st.text_input('חפש לפי תעודת זהות')
+        s_id = st.text_input('לפי תעודת זהות')
     
     if s_name or s_id:
         res = master_df.copy()
-        if s_name and 'שם' in res.columns:
-            res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
-        if s_id and 'תעודת זהות' in res.columns:
-            res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
+        if s_name: res = res[res['שם'].astype(str).str.contains(s_name, na=False)]
+        if s_id: res = res[res['תעודת זהות'].astype(str).str.contains(s_id, na=False)]
         st.dataframe(res, use_container_width=True)
 
     st.divider()
 
-    # --- איתור כפילויות ---
-    st.subheader('👥 איתור כפילויות')
+    # --- איתור כפילויות - התצוגה שביקשת ---
+    st.subheader('👥 איתור רשומות כפולות (היסטוריית עבודה)')
     
-    if st.button('🔍 נתח כפילויות'):
+    if st.button('🔍 הצג את כל העובדים שמופיעים יותר מפעם אחת'):
         if 'תעודת זהות' in master_df.columns:
+            # מציאת כל השורות שבהן תעודת הזהות חוזרת על עצמה
             is_duplicate = master_df.duplicated(subset=['תעודת זהות'], keep=False)
             dupes = master_df[is_duplicate].copy()
             
             if not dupes.empty:
-                agg_dict = {}
-                if 'שם' in dupes.columns: 
-                    agg_dict['שם'] = 'first'
-                if 'מקום העסקה' in dupes.columns:
-                    # כאן הקסם: אוסף את כל המקומות הייחודיים ומחבר אותם למחרוזת אחת
-                    agg_dict['מקום העסקה'] = lambda x: ' | '.join(x.astype(str).unique())
-                if 'תקופת העסקה' in dupes.columns:
-                    agg_dict['תקופת העסקה'] = 'count'
+                # מיון כדי לראות את כל הרשומות של אותו עובד ברצף (לפי ת"ז ואז תקופה)
+                dupes_sorted = dupes.sort_values(by=['תעודת זהות', 'תקופת העסקה'])
                 
-                summary = dupes.groupby('תעודת זהות').agg(agg_dict).reset_index()
+                st.warning(f'נמצאו {dupes["תעודת זהות"].nunique()} עובדים עם רשומות כפולות.')
                 
-                # שינוי שמות עמודות לתצוגה ברורה
-                rename_cols = {
-                    'מקום העסקה': 'מקומות עבודה שזוהו',
-                    'תקופת העסקה': 'סה"כ מופעים'
-                }
-                summary.rename(columns=rename_cols, inplace=True)
+                # הצגת הטבלה המפורטת בדיוק כפי שביקשת
+                display_cols = ['שם', 'תעודת זהות', 'מקום העסקה', 'תקופת העסקה']
+                final_cols = [c for c in display_cols if c in dupes_sorted.columns]
                 
-                st.session_state['dupes_summary'] = summary
-                st.session_state['dupes_full'] = dupes.sort_values(by=['תעודת זהות'])
-            else:
-                st.session_state['dupes_summary'] = 'empty'
-        else:
-            st.error('עמודת תעודת זהות חסרה.')
-
-    # תצוגת התוצאות
-    if 'dupes_summary' in st.session_state:
-        if isinstance(st.session_state['dupes_summary'], pd.DataFrame):
-            st.warning(f"נמצאו {len(st.session_state['dupes_summary'])} עובדים כפולים.")
-            
-            t1, t2 = st.tabs(["📋 סיכום מקומות עבודה", "📄 פירוט מלא (כל השורות)"])
-            with t1:
-                st.write("בטבלה זו כל עובד מופיע פעם אחת עם רשימת כל המעסיקים שלו:")
-                st.dataframe(st.session_state['dupes_summary'], use_container_width=True)
-            with t2:
-                st.write("כאן ניתן לראות כל שורה בנפרד מהקבצים המקוריים:")
-                st.dataframe(st.session_state['dupes_full'], use_container_width=True)
+                st.write('להלן פירוט המקומות והתקופות של העובדים הכפולים:')
+                st.dataframe(dupes_sorted[final_cols], use_container_width=True)
                 
+                # ייצוא לאקסל
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    st.session_state['dupes_full'].to_excel(writer, index=False)
-                st.download_button('📥 הורד פירוט מלא לאקסל', output.getvalue(), 'duplicates_report.xlsx')
-        elif st.session_state['dupes_summary'] == 'empty':
-            st.success('לא נמצאו כפילויות.')
+                    dupes_sorted[final_cols].to_excel(writer, index=False)
+                st.download_button('📥 הורד את רשימת הכפילויות לאקסל', output.getvalue(), 'duplicate_history.xlsx')
+            else:
+                st.success('לא נמצאו כפילויות. כל עובד מופיע פעם אחת בלבד.')
+        else:
+            st.error('חסרה עמודת תעודת זהות לביצוע הבדיקה.')
 
     st.divider()
-    with st.expander('צפה במאגר המלא'):
+    with st.expander('צפה במאגר המלא (כל העובדים)'):
         st.write(master_df)
 else:
-    st.info('המערכת מוכנה. העלה קובץ אקסל כדי להתחיל.')
+    st.info('המערכת ריקה. העלה קובץ אקסל כדי להתחיל.')
