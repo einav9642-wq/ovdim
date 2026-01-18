@@ -23,10 +23,12 @@ def save_data(df):
 def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.astype(str).str.strip()
+    # מילון המרה מורחב לזיהוי מקומות עבודה
     rename_map = {
         'ת.ז': 'תעודת זהות', 'מספר זהות': 'תעודת זהות', 
-        'שם עובד': 'שם', 'מעסיק': 'מקום העסקה', 
-        'תקופה': 'תקופת העסקה'
+        'שם עובד': 'שם', 'שם מלא': 'שם',
+        'מעסיק': 'מקום העסקה', 'שם מעסיק': 'מקום העסקה', 'חברה': 'מקום העסקה',
+        'תקופה': 'תקופת העסקה', 'שנה': 'תקופת העסקה'
     }
     df.rename(columns=rename_map, inplace=True)
     required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
@@ -81,18 +83,25 @@ if not master_df.empty:
             
             if not dupes.empty:
                 agg_dict = {}
-                if 'שם' in dupes.columns: agg_dict['שם'] = 'first'
+                if 'שם' in dupes.columns: 
+                    agg_dict['שם'] = 'first'
                 if 'מקום העסקה' in dupes.columns:
-                    agg_dict['מקום העסקה'] = lambda x: ', '.join(x.astype(str).unique())
+                    # כאן הקסם: אוסף את כל המקומות הייחודיים ומחבר אותם למחרוזת אחת
+                    agg_dict['מקום העסקה'] = lambda x: ' | '.join(x.astype(str).unique())
                 if 'תקופת העסקה' in dupes.columns:
                     agg_dict['תקופת העסקה'] = 'count'
                 
                 summary = dupes.groupby('תעודת זהות').agg(agg_dict).reset_index()
-                if 'תקופת העסקה' in summary.columns:
-                    summary.rename(columns={'תקופת העסקה': 'מספר רשומות'}, inplace=True)
+                
+                # שינוי שמות עמודות לתצוגה ברורה
+                rename_cols = {
+                    'מקום העסקה': 'מקומות עבודה שזוהו',
+                    'תקופת העסקה': 'סה"כ מופעים'
+                }
+                summary.rename(columns=rename_cols, inplace=True)
                 
                 st.session_state['dupes_summary'] = summary
-                st.session_state['dupes_full'] = dupes.sort_values(by='תעודת זהות')
+                st.session_state['dupes_full'] = dupes.sort_values(by=['תעודת זהות'])
             else:
                 st.session_state['dupes_summary'] = 'empty'
         else:
@@ -103,15 +112,18 @@ if not master_df.empty:
         if isinstance(st.session_state['dupes_summary'], pd.DataFrame):
             st.warning(f"נמצאו {len(st.session_state['dupes_summary'])} עובדים כפולים.")
             
-            t1, t2 = st.tabs(["📋 סיכום", "📄 פירוט מלא"])
+            t1, t2 = st.tabs(["📋 סיכום מקומות עבודה", "📄 פירוט מלא (כל השורות)"])
             with t1:
+                st.write("בטבלה זו כל עובד מופיע פעם אחת עם רשימת כל המעסיקים שלו:")
                 st.dataframe(st.session_state['dupes_summary'], use_container_width=True)
             with t2:
+                st.write("כאן ניתן לראות כל שורה בנפרד מהקבצים המקוריים:")
                 st.dataframe(st.session_state['dupes_full'], use_container_width=True)
+                
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     st.session_state['dupes_full'].to_excel(writer, index=False)
-                st.download_button('📥 הורד פירוט מלא לאקסל', output.getvalue(), 'duplicates.xlsx')
+                st.download_button('📥 הורד פירוט מלא לאקסל', output.getvalue(), 'duplicates_report.xlsx')
         elif st.session_state['dupes_summary'] == 'empty':
             st.success('לא נמצאו כפילויות.')
 
