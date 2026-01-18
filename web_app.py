@@ -11,11 +11,8 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_excel(DATA_FILE)
-            # ניקוי שמות עמודות וערכי NaN מיד עם הטעינה
             df.columns = df.columns.astype(str).str.strip()
-            df = df.fillna('')
-            # וידוא שכל העמודות הן בפורמט טקסט
-            df = df.astype(str)
+            df = df.fillna('').astype(str)
             if 'תעודת זהות' in df.columns:
                 df['תעודת זהות'] = df['תעודת זהות'].str.replace('.0', '', regex=False).str.strip()
             return df
@@ -24,7 +21,6 @@ def load_data():
     return pd.DataFrame()
 
 def save_data(df):
-    # החלפת כל מה שעלול להפוך ל-NaN לפני השמירה
     df = df.fillna('').astype(str)
     df.to_excel(DATA_FILE, index=False)
 
@@ -32,7 +28,6 @@ def process_and_filter(uploaded_file):
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.astype(str).str.strip()
     
-    # נרמול שמות עמודות (שימוש בגרשיים כפולים למניעת שגיאות סינטקס)
     rename_map = {
         "ת.ז": "תעודת זהות", "ת'ז": "תעודת זהות", "תז": "תעודת זהות",
         "מספר זהות": "תעודת זהות", "מס זהות": "תעודת זהות", "מס' זהות": "תעודת זהות",
@@ -43,20 +38,16 @@ def process_and_filter(uploaded_file):
     df.rename(columns=rename_map, inplace=True)
     
     if 'תעודת זהות' in df.columns:
-        # ניקוי שורות ללא ת"ז
         df = df.dropna(subset=['תעודת זהות'])
         df['תעודת זהות'] = df['תעודת זהות'].astype(str).str.replace('.0', '', regex=False).str.strip()
         df = df[df['תעודת זהות'] != '']
     
-    # בחירת עמודות קיימות בלבד
     required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה']
     existing = [c for c in required if c in df.columns]
-    
-    # החזרת המידע כשהוא נקי מ-NaN
     return df[existing].fillna('').astype(str)
 
 # --- ממשק המשתמש ---
-st.title('📂 מערכת איתור כפילויות - ניקוי נתונים סופי')
+st.title('📂 מערכת הצלבת נתונים - תצוגה תמציתית')
 
 with st.sidebar:
     st.header('1. ניהול נתונים')
@@ -67,17 +58,13 @@ with st.sidebar:
             current_df = load_data()
             combined = pd.concat([current_df, new_data], ignore_index=True)
             save_data(combined)
-            st.success('הנתונים נוספו! המאגר נוקה מ-NaN.')
+            st.success('הנתונים נוספו בהצלחה!')
             st.rerun()
-        else:
-            st.error('לא נמצאו נתונים תקינים (ודא שיש עמודת ת.ז).')
-    
-    st.divider()
-    if st.button('🗑️ מחק את כל המאגר והתחל מחדש'):
+
+    if st.button('🗑️ מחק מאגר והתחל מחדש'):
         if os.path.exists(DATA_FILE):
             os.remove(DATA_FILE)
         st.session_state.clear()
-        st.warning('המאגר נמחק לצורך ניקוי. העלה קבצים מחדש.')
         st.rerun()
 
 master_df = load_data()
@@ -91,46 +78,45 @@ if not master_df.empty:
     
     if s_name or s_id:
         res = master_df.copy()
-        if s_name and 'שם' in res.columns:
-            res = res[res['שם'].str.contains(s_name, na=False)]
-        if s_id and 'תעודת זהות' in res.columns:
-            res = res[res['תעודת זהות'].str.contains(s_id, na=False)]
+        if s_name: res = res[res['שם'].str.contains(s_name, na=False)]
+        if s_id: res = res[res['תעודת זהות'].str.contains(s_id, na=False)]
         st.dataframe(res, use_container_width=True)
 
     st.divider()
 
-    # --- איתור כפילויות ---
-    st.subheader('👥 איתור רשומות כפולות')
+    # --- איתור כפילויות תמציתי ---
+    st.subheader('👥 איתור כפילויות (שורה אחת לכל עובד)')
     
-    if st.button('🔍 הצג כפילויות (ת"ז שחוזרת על עצמה)'):
+    if st.button('🔍 נתח והצג כפילויות'):
         if 'תעודת זהות' in master_df.columns:
-            # סינון רק לערכים שיש להם ת"ז בפועל
-            valid_df = master_df[master_df['תעודת זהות'].str.strip() != '']
-            is_duplicate = valid_df.duplicated(subset=['תעודת זהות'], keep=False)
-            dupes = valid_df[is_duplicate].copy()
+            # סינון רק לאלו שיש להם כפילות
+            is_duplicate = master_df.duplicated(subset=['תעודת זהות'], keep=False)
+            dupes = master_df[is_duplicate].copy()
             
             if not dupes.empty:
-                sort_cols = [c for c in ['תעודת זהות', 'מקום העסקה'] if c in dupes.columns]
-                dupes_sorted = dupes.sort_values(by=sort_cols)
+                # איחוד הנתונים: לכל ת"ז נשמור שם אחד, ונאחד את כל המקומות והתקופות
+                summary = dupes.groupby('תעודת זהות').agg({
+                    'שם': lambda x: ' / '.join(set(filter(None, x))), # אוסף שמות ייחודיים
+                    'מקום העסקה': lambda x: ' | '.join(set(filter(None, x))), # אוסף מעסיקים ייחודיים
+                    'תקופת העסקה': lambda x: ', '.join(set(filter(None, x))) # אוסף תקופות ייחודיות
+                }).reset_index()
                 
-                st.warning(f'נמצאו {dupes["תעודת זהות"].nunique()} עובדים המופיעים ביותר ממקום אחד.')
+                st.warning(f"נמצאו {len(summary)} עובדים המופיעים ביותר ממקום אחד במאגר.")
                 
-                # הצגת הטבלה כולל שמות העובדים
-                display_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה']
-                final_cols = [c for c in display_cols if c in dupes_sorted.columns]
+                # תצוגה
+                st.dataframe(summary, use_container_width=True)
                 
-                st.dataframe(dupes_sorted[final_cols], use_container_width=True)
-                
+                # כפתור הורדה לסיכום
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    dupes_sorted[final_cols].to_excel(writer, index=False)
-                st.download_button('📥 הורד את רשימת הכפילויות לאקסל', output.getvalue(), 'duplicates_report.xlsx')
+                    summary.to_excel(writer, index=False)
+                st.download_button('📥 הורד טבלת סיכום לאקסל', output.getvalue(), 'summary_report.xlsx')
             else:
-                st.success('לא נמצאו כפילויות במאגר.')
+                st.success('לא נמצאו כפילויות.')
         else:
             st.error('עמודת תעודת זהות לא זוהתה.')
 
-    with st.expander('צפה במאגר המלא'):
+    with st.expander('צפה במאגר המלא (כל השורות)'):
         st.write(master_df)
 else:
-    st.info('המאגר ריק. אנא העלה קבצים כדי להתחיל.')
+    st.info('המאגר ריק.')
