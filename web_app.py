@@ -12,96 +12,80 @@ def load_data():
         try:
             df = pd.read_excel(DATA_FILE)
             df.columns = df.columns.astype(str).str.strip()
-            df = df.fillna('').astype(str)
-            
-            # ניסיון לנרמל את עמודת הזהות בתוך המאגר הקיים
-            rename_map = {}
-            for col in df.columns:
-                if any(key in col for key in ["זהות", "ת.ז", 'ת"ז', 'ID']):
-                    rename_map[col] = "תעודת זהות"
-            if rename_map:
-                df.rename(columns=rename_map, inplace=True)
-                
-            if 'תעודת זהות' in df.columns:
-                df['תעודת זהות'] = df['תעודת זהות'].str.replace('.0', '', regex=False).str.strip()
-            return df
+            return df.fillna('').astype(str)
         except:
             return pd.DataFrame()
     return pd.DataFrame()
 
 def save_data(df):
-    df = df.fillna('').astype(str)
     df.to_excel(DATA_FILE, index=False)
 
 def clean_id(val):
     return str(val).strip().split('.')[0]
 
 def process_file(uploaded_file):
-    try:
-        df = pd.read_excel(uploaded_file)
-        original_columns = df.columns.astype(str).str.strip().tolist()
-        df.columns = original_columns
-        
-        rename_map = {
-            "ת.ז": "תעודת זהות", "ת'ז": "תעודת זהות", "תז": "תעודת זהות", "ת.ז.": "תעודת זהות",
-            "מספר זהות": "תעודת זהות", "מס' זהות": "תעודת זהות", "מס זהות": "תעודת זהות",
-            "מספר זהות עובד": "תעודת זהות", "ID": "תעודת זהות", "id": "תעודת זהות",
-            "שם עובד": "שם", "שם מלא": "שם", "שם": "שם",
-            "מעסיק": "מקום העסקה", "חברה": "מקום העסקה", "שם מעסיק": "מקום העסקה",
-            "תקופה": "תקופת העסקה", "שנה": "תקופת העסקה", "תאריך": "תקופת העסקה"
-        }
-        
-        # זיהוי אוטומטי נוסף
-        for col in original_columns:
-            if col not in rename_map.values():
-                if any(key in col for key in ["זהות", "ת.ז", 'ת"ז', 'ID']):
-                    rename_map[col] = "תעודת זהות"
-                elif any(key in col for key in ["שם", "עובד"]) and "מעסיק" not in col:
-                    rename_map[col] = "שם"
-                elif any(key in col for key in ["מעסיק", "חברה", "מקום"]):
-                    rename_map[col] = "מקום העסקה"
-
-        df.rename(columns=rename_map, inplace=True)
-        
-        if 'תעודת זהות' in df.columns:
-            df['תעודת זהות'] = df['תעודת זהות'].apply(clean_id)
-            df = df[df['תעודת זהות'] != '']
-        else:
-            st.error(f"⚠️ בקובץ '{uploaded_file.name}' לא נמצאה עמודת תעודת זהות. העמודות הן: {original_columns}")
-            return pd.DataFrame()
-        
-        df['מקור קובץ'] = uploaded_file.name
-        required = ['שם', 'תעודת זהות', 'תקופת העסקה', 'מקום העסקה', 'מקור קובץ']
-        existing = [c for c in required if c in df.columns]
-        return df[existing].fillna('').astype(str)
-    except Exception as e:
-        st.error(f"שגיאה בעיבוד הקובץ {uploaded_file.name}: {e}")
-        return pd.DataFrame()
+    """מעבד קובץ ומנסה לנרמל עמודות"""
+    df = pd.read_excel(uploaded_file)
+    df.columns = df.columns.astype(str).str.strip()
+    
+    # מילון שמות מורחב מאוד
+    rename_map = {
+        "ת.ז": "תעודת זהות", "ת'ז": "תעודת זהות", "תז": "תעודת זהות", "ת.ז.": "תעודת זהות",
+        "מספר זהות": "תעודת זהות", "מס' זהות": "תעודת זהות", "מס זהות": "תעודת זהות",
+        "זהות": "תעודת זהות", "ID": "תעודת זהות", "id": "תעודת זהות", "מספר": "תעודת זהות",
+        "שם עובד": "שם", "שם מלא": "שם", "שם": "שם", "עובד": "שם",
+        "מעסיק": "מקום העסקה", "חברה": "מקום העסקה", "שם מעסיק": "מקום העסקה",
+        "תקופה": "תקופת העסקה", "שנה": "תקופת העסקה", "תאריך": "תקופת העסקה"
+    }
+    
+    df.rename(columns=rename_map, inplace=True)
+    return df
 
 # --- ממשק המשתמש ---
-st.title('📂 מערכת ניתוח נתוני עובדים')
+st.title('📂 מערכת חכמה לניהול והצלבת נתוני עובדים')
 
 master_df = load_data()
 
 with st.sidebar:
-    st.header('1. ניהול נתונים')
-    uploaded_files = st.file_uploader('בחר קבצים (ניתן לבחור כמה)', type=['xlsx'], accept_multiple_files=True)
+    st.header('1. טעינת קבצים')
+    uploaded_files = st.file_uploader('בחר קבצי אקסל (אפשר כמה)', type=['xlsx'], accept_multiple_files=True)
     
-    if uploaded_files and st.button('✅ הוסף למאגר'):
-        all_new_data = []
-        for f in uploaded_files:
-            new_data = process_file(f)
-            if not new_data.empty:
-                all_new_data.append(new_data)
+    if uploaded_files:
+        st.info(f"נטענו {len(uploaded_files)} קבצים. וודא זיהוי עמודות:")
         
-        if all_new_data:
-            combined_new = pd.concat(all_new_data, ignore_index=True)
-            if not master_df.empty:
-                updated_master = pd.concat([master_df, combined_new], ignore_index=True)
-            else:
-                updated_master = combined_new
+        all_processed_data = []
+        for f in uploaded_files:
+            temp_df = process_file(f)
+            
+            # אם לא זוהתה תעודת זהות או שם, נאפשר למשתמש לבחור ידנית
+            cols = list(temp_df.columns)
+            
+            with st.expander(f"הגדרות עבור: {f.name}"):
+                id_col = st.selectbox(f"בחר עמודת תעודת זהות עבור {f.name}", 
+                                    options=cols, 
+                                    index=cols.index("תעודת זהות") if "תעודת זהות" in cols else 0)
+                name_col = st.selectbox(f"בחר עמודת שם עבור {f.name}", 
+                                      options=cols, 
+                                      index=cols.index("שם") if "שם" in cols else 0)
+                
+                if st.button(f"אשר והוסף את {f.name}"):
+                    final_df = temp_df.copy()
+                    final_df['תעודת זהות'] = final_df[id_col].apply(clean_id)
+                    final_df['שם'] = final_df[name_col]
+                    final_df['מקור קובץ'] = f.name
+                    
+                    # שמירה רק של עמודות רלוונטיות
+                    target_cols = ['תעודת זהות', 'שם', 'מקום העסקה', 'תקופת העסקה', 'מקור קובץ']
+                    available = [c for c in target_cols if c in final_df.columns]
+                    
+                    all_processed_data.append(final_df[available])
+                    st.success(f"{f.name} מוכן להוספה")
+
+        if all_processed_data and st.button('🚀 הוסף את כל המאושרים למאגר'):
+            new_batch = pd.concat(all_processed_data, ignore_index=True)
+            updated_master = pd.concat([master_df, new_batch], ignore_index=True)
             save_data(updated_master)
-            st.success('הנתונים נוספו בהצלחה.')
+            st.success("הנתונים עודכנו במאגר!")
             st.rerun()
 
     st.divider()
@@ -117,56 +101,43 @@ with st.sidebar:
 
 # --- גוף האפליקציה ---
 if not master_df.empty:
-    st.subheader('🔍 חיפוש וניתוח')
+    st.subheader('🔍 חיפוש ואיתור כפילויות')
+    
+    # חיפוש
     c1, c2 = st.columns(2)
-    with c1: s_name = st.text_input('לפי שם')
-    with c2: s_id = st.text_input('לפי תעודת זהות')
+    with c1: s_name = st.text_input('חפש לפי שם')
+    with c2: s_id = st.text_input('חפש לפי תעודת זהות')
     
     if s_name or s_id:
         res = master_df.copy()
-        if s_name and 'שם' in res.columns: res = res[res['שם'].str.contains(s_name, na=False)]
-        if s_id and 'תעודת זהות' in res.columns: res = res[res['תעודת זהות'].str.contains(s_id, na=False)]
+        if s_name: res = res[res['שם'].str.contains(s_name, na=False)]
+        if s_id: res = res[res['תעודת זהות'].str.contains(s_id, na=False)]
         st.dataframe(res, use_container_width=True)
 
     st.divider()
-    st.subheader('👥 איתור כפילויות')
     
-    if st.button('🔍 אתר כפילויות'):
-        # בדיקה אם עמודת תעודת זהות קיימת (אחרי הניסיון לנרמל בטעינה)
-        col_to_check = None
+    if st.button('🔍 אתר כפילויות עכשיו'):
+        # וידוא שקיימת עמודת זהות
         if 'תעודת זהות' in master_df.columns:
-            col_to_check = 'תעודת זהות'
-        else:
-            # מוצאים את העמודה שמתנהגת כמו תעודת זהות
-            for col in master_df.columns:
-                if any(key in col for key in ["זהות", "ת.ז", 'ת"ז', 'ID']):
-                    col_to_check = col
-                    break
-        
-        if col_to_check:
-            valid_df = master_df[master_df[col_to_check] != '']
-            is_duplicate = valid_df.duplicated(subset=[col_to_check], keep=False)
+            valid_df = master_df[master_df['תעודת זהות'] != '']
+            is_duplicate = valid_df.duplicated(subset=['תעודת זהות'], keep=False)
             dupes = valid_df[is_duplicate].copy()
             
             if not dupes.empty:
-                dupes_sorted = dupes.sort_values(by=[col_to_check])
-                display_cols = ['תעודת זהות', col_to_check, 'שם', 'מקום העסקה', 'תקופת העסקה', 'מקור קובץ']
-                final_cols = [c for c in display_cols if c in dupes_sorted.columns]
-                # הסרת כפילות אם 'תעודת זהות' ו-col_to_check הם אותו דבר
-                final_cols = list(dict.fromkeys(final_cols))
-                
-                st.warning(f"נמצאו {dupes[col_to_check].nunique()} עובדים כפולים.")
-                st.dataframe(dupes_sorted[final_cols], use_container_width=True)
+                dupes_sorted = dupes.sort_values(by=['תעודת זהות'])
+                st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים כפולים.")
+                st.dataframe(dupes_sorted, use_container_width=True)
                 
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    dupes_sorted[final_cols].to_excel(writer, index=False)
-                st.download_button('📥 הורד אקסל', output.getvalue(), 'duplicates.xlsx')
-            else: st.success('אין כפילויות.')
+                    dupes_sorted.to_excel(writer, index=False)
+                st.download_button('📥 הורד דוח כפילויות', output.getvalue(), 'duplicates.xlsx')
+            else:
+                st.success("לא נמצאו כפילויות.")
         else:
-            st.error(f"לא זוהתה עמודת זהות. העמודות הקיימות במאגר: {list(master_df.columns)}")
+            st.error("לא נמצאה עמודת 'תעודת זהות' במאגר. נסה לאפס ולהעלות מחדש תוך בחירה נכונה של העמודות.")
 
     with st.expander('צפה במאגר המלא'):
         st.write(master_df)
 else:
-    st.info('המערכת ריקה. העלה קבצים מימין.')
+    st.info('המערכת ריקה. העלה קבצים דרך התפריט בצד.')
