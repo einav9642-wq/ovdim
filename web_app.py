@@ -7,25 +7,37 @@ import io
 st.set_page_config(page_title="ניהול נתוני עובדים", layout="wide")
 DATA_FILE = "master_data.xlsx"
 
-# אתחול זיכרון זמני לקבצים מאושרים
 if "approved_files_data" not in st.session_state:
     st.session_state["approved_files_data"] = {}
+
+def clean_id_logic(val):
+    """פונקציה מרכזית לניקוי מספר זהות מנקודה עשרונית ורווחים"""
+    if pd.isna(val) or val == "":
+        return ""
+    s = str(val).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
 
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_excel(DATA_FILE)
             df.columns = df.columns.astype(str).str.strip()
-            return df.fillna("").astype(str)
+            df = df.fillna("").astype(str)
+            # ניקוי נוסף של תעודת הזהות לאחר הטעינה מהמאגר
+            if "תעודת זהות" in df.columns:
+                df["תעודת זהות"] = df["תעודת זהות"].apply(clean_id_logic)
+            return df
         except:
             return pd.DataFrame()
     return pd.DataFrame()
 
 def save_data(df):
+    # וידוא ניקוי לפני שמירה לאקסל
+    if "תעודת זהות" in df.columns:
+        df["תעודת זהות"] = df["תעודת זהות"].apply(clean_id_logic)
     df.to_excel(DATA_FILE, index=False)
-
-def clean_id(val):
-    return str(val).strip().split(".")[0]
 
 def process_file_structure(uploaded_file):
     df = pd.read_excel(uploaded_file)
@@ -33,7 +45,7 @@ def process_file_structure(uploaded_file):
     return df
 
 # --- ממשק המשתמש ---
-st.title("📂 מערכת ניתוח נתוני עובדים - תהליך טעינה חכם")
+st.title("📂 מערכת ניתוח נתוני עובדים - תיקון מספרי זהות")
 
 master_df = load_data()
 
@@ -42,14 +54,11 @@ with st.sidebar:
     uploaded_files = st.file_uploader("בחר קבצי אקסל (אפשר כמה)", type=["xlsx"], accept_multiple_files=True)
     
     if uploaded_files:
-        st.info(f"נטענו {len(uploaded_files)} קבצים להגדרה.")
-        
         for f in uploaded_files:
-            # אם הקובץ כבר אושר
             if f.name in st.session_state["approved_files_data"]:
                 col_a, col_b = st.columns([4, 1])
                 col_a.success(f"✅ {f.name}")
-                if col_b.button("✖️", key=f"del_{f.name}", help="ביטול אישור קובץ"):
+                if col_b.button("✖️", key=f"del_{f.name}"):
                     del st.session_state["approved_files_data"][f.name]
                     st.rerun()
                 continue
@@ -58,7 +67,6 @@ with st.sidebar:
             cols = list(temp_df.columns)
             
             with st.expander(f"⚙️ הגדר עמודות עבור: {f.name}"):
-                # זיהוי אוטומטי של אינדקסים
                 def find_idx(keywords, columns):
                     for i, col in enumerate(columns):
                         if any(k in col for k in keywords): return i
@@ -69,7 +77,6 @@ with st.sidebar:
                 emp_idx = find_idx(["מעסיק", "חברה", "מקום"], cols)
                 period_idx = find_idx(["תקופה", "שנה", "תאריך"], cols)
 
-                # שימוש בגרשיים משולבים למניעת שגיאת סינטקס
                 id_col = st.selectbox(f"עמודת ת'ז ({f.name})", cols, index=id_idx)
                 name_col = st.selectbox(f"עמודת שם ({f.name})", cols, index=name_idx)
                 employer_col = st.selectbox(f"עמודת מעסיק ({f.name})", cols, index=emp_idx)
@@ -77,7 +84,8 @@ with st.sidebar:
                 
                 if st.button(f"אשר את {f.name}", key=f"btn_{f.name}"):
                     final_df = temp_df.copy()
-                    final_df["תעודת זהות"] = final_df[id_col].apply(clean_id)
+                    # המרה לטקסט וניקוי .0 מיד בשלב האישור
+                    final_df["תעודת זהות"] = final_df[id_col].apply(clean_id_logic)
                     final_df["שם"] = final_df[name_col].astype(str)
                     final_df["מקום העסקה"] = final_df[employer_col].astype(str)
                     final_df["תקופת העסקה"] = final_df[time_col].astype(str)
@@ -87,16 +95,14 @@ with st.sidebar:
                     st.session_state["approved_files_data"][f.name] = final_df[selected]
                     st.rerun()
 
-        # כפתור הוספה סופי למאגר
         if st.session_state["approved_files_data"]:
             st.divider()
-            st.warning(f"ממתינים להוספה: {len(st.session_state['approved_files_data'])} קבצים")
             if st.button("🚀 העלה את כל המאושרים למאגר"):
                 new_batch = pd.concat(st.session_state["approved_files_data"].values(), ignore_index=True)
                 updated_master = pd.concat([master_df, new_batch], ignore_index=True)
                 save_data(updated_master)
                 st.session_state["approved_files_data"] = {} 
-                st.success("הנתונים נשמרו בהצלחה!")
+                st.success("הנתונים נשמרו!")
                 st.rerun()
 
     st.divider()
@@ -109,41 +115,40 @@ with st.sidebar:
 if not master_df.empty:
     st.subheader("🔍 חיפוש וניתוח")
     
-    with st.expander("📄 רשימת הקבצים במאגר"):
-        if "מקור קובץ" in master_df.columns:
-            for fn in master_df["מקור קובץ"].unique():
-                st.text(f"• {fn}")
-
     c1, c2 = st.columns(2)
     with c1: s_name = st.text_input("חפש לפי שם")
     with c2: s_id = st.text_input("חפש לפי תעודת זהות")
     
+    # החלת ניקוי על המאגר המוצג ליתר ביטחון
+    display_df = master_df.copy()
+    if "תעודת זהות" in display_df.columns:
+        display_df["תעודת זהות"] = display_df["תעודת זהות"].apply(clean_id_logic)
+
     if s_name or s_id:
-        res = master_df.copy()
-        if s_name: res = res[res["שם"].str.contains(s_name, na=False)]
-        if s_id: res = res[res["תעודת זהות"].str.contains(s_id, na=False)]
-        st.dataframe(res, use_container_width=True)
+        if s_name: display_df = display_df[display_df["שם"].str.contains(s_name, na=False)]
+        if s_id: display_df = display_df[display_df["תעודת זהות"].str.contains(s_id, na=False)]
+        st.dataframe(display_df, use_container_width=True)
 
     st.divider()
     
     if st.button("🔍 אתר כפילויות עכשיו"):
-        valid_df = master_df[master_df["תעודת זהות"].str.strip() != ""]
+        valid_df = display_df[display_df["תעודת זהות"].str.strip() != ""]
         is_duplicate = valid_df.duplicated(subset=["תעודת זהות"], keep=False)
         dupes = valid_df[is_duplicate].copy()
         
         if not dupes.empty:
-            dupes_sorted = dupes.sort_values(by=["תעודת זהות", "תקופת העסקה"])
+            dupes_sorted = dupes.sort_values(by=["תעודת זהות"])
             st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים כפולים.")
             st.dataframe(dupes_sorted, use_container_width=True)
             
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 dupes_sorted.to_excel(writer, index=False)
-            st.download_button("📥 הורד דוח כפילויות (אקסל)", output.getvalue(), "duplicates.xlsx")
+            st.download_button("📥 הורד דוח כפילויות", output.getvalue(), "duplicates.xlsx")
         else:
-            st.success("לא נמצאו כפילויות.")
+            st.success("אין כפילויות.")
 
     with st.expander("צפה במאגר המלא"):
-        st.write(master_df)
+        st.write(display_df)
 else:
-    st.info("המערכת ריקה. העלה קבצים דרך התפריט בצד.")
+    st.info("המערכת ריקה. העלה קבצים מימין.")
