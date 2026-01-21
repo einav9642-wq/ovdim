@@ -22,6 +22,8 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             df = pd.read_excel(DATA_FILE)
+            # הסרת עמודות אינדקס מיותרות שנוצרו בעבר (Unnamed)
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
             df.columns = df.columns.astype(str).str.strip()
             df = df.fillna("").astype(str)
             if "תעודת זהות" in df.columns:
@@ -34,15 +36,18 @@ def load_data():
 def save_data(df):
     if "תעודת זהות" in df.columns:
         df["תעודת זהות"] = df["תעודת זהות"].apply(clean_id_logic)
+    # index=False מונע יצירה של עמודת Unnamed בשמירה הבאה
     df.to_excel(DATA_FILE, index=False)
 
 def process_file_structure(uploaded_file):
     df = pd.read_excel(uploaded_file)
+    # ניקוי עמודות Unnamed גם מהקובץ החדש שמועלה
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     df.columns = df.columns.astype(str).str.strip()
     return df
 
 # --- ממשק המשתמש ---
-st.title("📂 מערכת ניתוח נתוני עובדים - תיקון שגיאת עמודות")
+st.title("📂 מערכת ניתוח נתוני עובדים - תצוגה נקייה")
 
 master_df = load_data()
 
@@ -139,7 +144,6 @@ if not master_df.empty:
         if not duplicate_ids.empty:
             dupes = valid_df[valid_df["תעודת זהות"].isin(duplicate_ids)].copy()
             
-            # בניית מילון האגרגציה בצורה דינמית כדי למנוע KeyError
             agg_dict = {}
             if "שם" in dupes.columns: agg_dict["שם"] = "first"
             if "מקום העסקה" in dupes.columns: 
@@ -151,7 +155,6 @@ if not master_df.empty:
             if "תקופת העסקה" in dupes.columns: 
                 agg_dict["תקופת העסקה"] = lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
             
-            # ביצוע האיחוד רק עם העמודות הקיימות
             summary_dupes = dupes.groupby("תעודת זהות").agg(agg_dict).reset_index()
             
             st.warning(f"נמצאו {len(summary_dupes)} עובדים כפולים.")
