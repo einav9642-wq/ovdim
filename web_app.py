@@ -11,7 +11,6 @@ if "approved_files_data" not in st.session_state:
     st.session_state["approved_files_data"] = {}
 
 def clean_id_logic(val):
-    """פונקציה מרכזית לניקוי מספר זהות מנקודה עשרונית ורווחים"""
     if pd.isna(val) or val == "":
         return ""
     s = str(val).strip()
@@ -25,7 +24,6 @@ def load_data():
             df = pd.read_excel(DATA_FILE)
             df.columns = df.columns.astype(str).str.strip()
             df = df.fillna("").astype(str)
-            # ניקוי נוסף של תעודת הזהות לאחר הטעינה מהמאגר
             if "תעודת זהות" in df.columns:
                 df["תעודת זהות"] = df["תעודת זהות"].apply(clean_id_logic)
             return df
@@ -34,7 +32,6 @@ def load_data():
     return pd.DataFrame()
 
 def save_data(df):
-    # וידוא ניקוי לפני שמירה לאקסל
     if "תעודת זהות" in df.columns:
         df["תעודת זהות"] = df["תעודת זהות"].apply(clean_id_logic)
     df.to_excel(DATA_FILE, index=False)
@@ -45,7 +42,7 @@ def process_file_structure(uploaded_file):
     return df
 
 # --- ממשק המשתמש ---
-st.title("📂 מערכת ניתוח נתוני עובדים - תיקון מספרי זהות")
+st.title("📂 מערכת ניתוח נתוני עובדים - דוח מרוכז כולל ייצוג משפטי")
 
 master_df = load_data()
 
@@ -64,7 +61,7 @@ with st.sidebar:
                 continue
                 
             temp_df = process_file_structure(f)
-            cols = list(temp_df.columns)
+            cols = ["- ללא -"] + list(temp_df.columns)
             
             with st.expander(f"⚙️ הגדר עמודות עבור: {f.name}"):
                 def find_idx(keywords, columns):
@@ -75,23 +72,31 @@ with st.sidebar:
                 id_idx = find_idx(["זהות", "ת.ז", "תז", "ID"], cols)
                 name_idx = find_idx(["שם", "עובד"], cols)
                 emp_idx = find_idx(["מעסיק", "חברה", "מקום"], cols)
+                lawyer_idx = find_idx(["עו\"ד", "עורך דין", "מייצג"], cols)
                 period_idx = find_idx(["תקופה", "שנה", "תאריך"], cols)
 
-                id_col = st.selectbox(f"עמודת ת'ז ({f.name})", cols, index=id_idx)
-                name_col = st.selectbox(f"עמודת שם ({f.name})", cols, index=name_idx)
-                employer_col = st.selectbox(f"עמודת מעסיק ({f.name})", cols, index=emp_idx)
-                time_col = st.selectbox(f"עמודת תקופה ({f.name})", cols, index=period_idx)
+                id_col = st.selectbox(f"עמודת ת'ז ({f.name})", cols[1:], index=max(0, id_idx-1))
+                name_col = st.selectbox(f"עמודת שם ({f.name})", cols[1:], index=max(0, name_idx-1))
+                employer_col = st.selectbox(f"עמודת מעסיק ({f.name})", cols[1:], index=max(0, emp_idx-1))
+                lawyer_col = st.selectbox(f"עמודת שם העו'ד ({f.name})", cols, index=lawyer_idx)
+                time_col = st.selectbox(f"עמודת תקופה ({f.name})", cols[1:], index=max(0, period_idx-1))
                 
                 if st.button(f"אשר את {f.name}", key=f"btn_{f.name}"):
                     final_df = temp_df.copy()
-                    # המרה לטקסט וניקוי .0 מיד בשלב האישור
                     final_df["תעודת זהות"] = final_df[id_col].apply(clean_id_logic)
                     final_df["שם"] = final_df[name_col].astype(str)
                     final_df["מקום העסקה"] = final_df[employer_col].astype(str)
                     final_df["תקופת העסקה"] = final_df[time_col].astype(str)
+                    
+                    # טיפול בעמודת עו"ד (יכולה להיות ריקה)
+                    if lawyer_col != "- ללא -":
+                        final_df["שם העו\"ד"] = final_df[lawyer_col].astype(str)
+                    else:
+                        final_df["שם העו\"ד"] = ""
+                        
                     final_df["מקור קובץ"] = f.name
                     
-                    selected = ["תעודת זהות", "שם", "מקום העסקה", "תקופת העסקה", "מקור קובץ"]
+                    selected = ["תעודת זהות", "שם", "מקום העסקה", "תקופת העסקה", "שם העו\"ד", "מקור קובץ"]
                     st.session_state["approved_files_data"][f.name] = final_df[selected]
                     st.rerun()
 
@@ -116,39 +121,45 @@ if not master_df.empty:
     st.subheader("🔍 חיפוש וניתוח")
     
     c1, c2 = st.columns(2)
-    with c1: s_name = st.text_input("חפש לפי שם")
+    with c1: s_name = st.text_input("חפש לפי שם עובד")
     with c2: s_id = st.text_input("חפש לפי תעודת זהות")
     
-    # החלת ניקוי על המאגר המוצג ליתר ביטחון
     display_df = master_df.copy()
-    if "תעודת זהות" in display_df.columns:
-        display_df["תעודת זהות"] = display_df["תעודת זהות"].apply(clean_id_logic)
-
-    if s_name or s_id:
-        if s_name: display_df = display_df[display_df["שם"].str.contains(s_name, na=False)]
-        if s_id: display_df = display_df[display_df["תעודת זהות"].str.contains(s_id, na=False)]
-        st.dataframe(display_df, use_container_width=True)
+    if s_name: display_df = display_df[display_df["שם"].str.contains(s_name, na=False)]
+    if s_id: display_df = display_df[display_df["תעודת זהות"].str.contains(s_id, na=False)]
+    
+    st.dataframe(display_df, use_container_width=True)
 
     st.divider()
     
-    if st.button("🔍 אתר כפילויות עכשיו"):
-        valid_df = display_df[display_df["תעודת זהות"].str.strip() != ""]
-        is_duplicate = valid_df.duplicated(subset=["תעודת זהות"], keep=False)
-        dupes = valid_df[is_duplicate].copy()
+    if st.button("🔍 אתר כפילויות (תצוגה מרוכזת)"):
+        valid_df = master_df[master_df["תעודת זהות"].str.strip() != ""].copy()
+        id_counts = valid_df["תעודת זהות"].value_counts()
+        duplicate_ids = id_counts[id_counts > 1].index
         
-        if not dupes.empty:
-            dupes_sorted = dupes.sort_values(by=["תעודת זהות"])
-            st.warning(f"נמצאו {dupes['תעודת זהות'].nunique()} עובדים כפולים.")
-            st.dataframe(dupes_sorted, use_container_width=True)
+        if not duplicate_ids.empty:
+            dupes = valid_df[valid_df["תעודת זהות"].isin(duplicate_ids)].copy()
+            
+            # איחוד הנתונים לשורה אחת לכל ת"ז כולל עו"ד
+            summary_dupes = dupes.groupby("תעודת זהות").agg({
+                "שם": "first",
+                "מקום העסקה": lambda x: ", ".join(sorted(set(filter(None, x.astype(str))))),
+                "שם העו\"ד": lambda x: ", ".join(sorted(set(filter(None, x.astype(str))))),
+                "מקור קובץ": lambda x: ", ".join(sorted(set(filter(None, x.astype(str))))),
+                "תקופת העסקה": lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
+            }).reset_index()
+            
+            st.warning(f"נמצאו {len(summary_dupes)} עובדים כפולים.")
+            st.dataframe(summary_dupes, use_container_width=True)
             
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                dupes_sorted.to_excel(writer, index=False)
-            st.download_button("📥 הורד דוח כפילויות", output.getvalue(), "duplicates.xlsx")
+                summary_dupes.to_excel(writer, index=False)
+            st.download_button("📥 הורד דוח כפילויות מרוכז", output.getvalue(), "summary_duplicates.xlsx")
         else:
-            st.success("אין כפילויות.")
+            st.success("לא נמצאו כפילויות.")
 
     with st.expander("צפה במאגר המלא"):
-        st.write(display_df)
+        st.write(master_df)
 else:
     st.info("המערכת ריקה. העלה קבצים מימין.")
