@@ -42,7 +42,7 @@ def process_file_structure(uploaded_file):
     return df
 
 # --- ממשק המשתמש ---
-st.title("📂 מערכת ניתוח נתוני עובדים - דוח מרוכז כולל ייצוג משפטי")
+st.title("📂 מערכת ניתוח נתוני עובדים - תיקון שגיאת עמודות")
 
 master_df = load_data()
 
@@ -88,7 +88,6 @@ with st.sidebar:
                     final_df["מקום העסקה"] = final_df[employer_col].astype(str)
                     final_df["תקופת העסקה"] = final_df[time_col].astype(str)
                     
-                    # טיפול בעמודת עו"ד (יכולה להיות ריקה)
                     if lawyer_col != "- ללא -":
                         final_df["שם העו\"ד"] = final_df[lawyer_col].astype(str)
                     else:
@@ -140,14 +139,20 @@ if not master_df.empty:
         if not duplicate_ids.empty:
             dupes = valid_df[valid_df["תעודת זהות"].isin(duplicate_ids)].copy()
             
-            # איחוד הנתונים לשורה אחת לכל ת"ז כולל עו"ד
-            summary_dupes = dupes.groupby("תעודת זהות").agg({
-                "שם": "first",
-                "מקום העסקה": lambda x: ", ".join(sorted(set(filter(None, x.astype(str))))),
-                "שם העו\"ד": lambda x: ", ".join(sorted(set(filter(None, x.astype(str))))),
-                "מקור קובץ": lambda x: ", ".join(sorted(set(filter(None, x.astype(str))))),
-                "תקופת העסקה": lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
-            }).reset_index()
+            # בניית מילון האגרגציה בצורה דינמית כדי למנוע KeyError
+            agg_dict = {}
+            if "שם" in dupes.columns: agg_dict["שם"] = "first"
+            if "מקום העסקה" in dupes.columns: 
+                agg_dict["מקום העסקה"] = lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
+            if "שם העו\"ד" in dupes.columns: 
+                agg_dict["שם העו\"ד"] = lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
+            if "מקור קובץ" in dupes.columns: 
+                agg_dict["מקור קובץ"] = lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
+            if "תקופת העסקה" in dupes.columns: 
+                agg_dict["תקופת העסקה"] = lambda x: ", ".join(sorted(set(filter(None, x.astype(str)))))
+            
+            # ביצוע האיחוד רק עם העמודות הקיימות
+            summary_dupes = dupes.groupby("תעודת זהות").agg(agg_dict).reset_index()
             
             st.warning(f"נמצאו {len(summary_dupes)} עובדים כפולים.")
             st.dataframe(summary_dupes, use_container_width=True)
